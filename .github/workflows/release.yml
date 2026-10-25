@@ -46,7 +46,7 @@ jobs:
           Copy-Item target/release/seepic.exe dist/seepic.exe
           Compress-Archive -Path dist/seepic.exe -DestinationPath "dist/$name.zip" -Force
           $hash = (Get-FileHash "dist/$name.zip" -Algorithm SHA256).Hash.ToLower()
-          Set-Content -Path dist/SHA256SUMS.txt -Value "$hash  $name.zip" -Encoding ascii
+          Set-Content -NoNewline -Path dist/SHA256SUMS.txt -Value "$hash  $name.zip" -Encoding ascii
           "PACKAGE_NAME=$name" >> $env:GITHUB_ENV
 
       - name: Create GitHub release
