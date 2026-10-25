@@ -1,0 +1,6 @@
+/target
+/dist
+
+# Local-only state, docs and tools; not part of the project.
+/.zcode/
+/.local/
