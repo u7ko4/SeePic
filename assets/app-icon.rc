@@ -1,0 +1,6 @@
+// Windows resource script for the application icon.
+//
+// The icon file is found through the include directory the build script
+// passes to rc.exe, so this stays a plain filename rather than a path relative
+// to whichever crate directory Cargo happens to run the compiler from.
+1 ICON "app-icon.ico"
