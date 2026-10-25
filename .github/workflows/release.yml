@@ -1,0 +1,59 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - '[0-9]*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  windows-x64:
+    name: Windows x64
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Test
+        run: cargo test --workspace --locked
+
+      - name: Build release
+        run: cargo build --release --locked -p seepic-app
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $tag = $env:GITHUB_REF_NAME
+          $name = "seepic-$tag-windows-x64"
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Copy-Item target/release/seepic.exe dist/seepic.exe
+          Compress-Archive -Path dist/seepic.exe -DestinationPath "dist/$name.zip" -Force
+          $hash = (Get-FileHash "dist/$name.zip" -Algorithm SHA256).Hash.ToLower()
+          Set-Content -Path dist/SHA256SUMS.txt -Value "$hash  $name.zip" -Encoding ascii
+          "PACKAGE_NAME=$name" >> $env:GITHUB_ENV
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: SeePic ${{ github.ref_name }}
+          tag_name: ${{ github.ref_name }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            dist/seepic.exe
+            dist/${{ env.PACKAGE_NAME }}.zip
+            dist/SHA256SUMS.txt
