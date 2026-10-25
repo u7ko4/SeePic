@@ -1,0 +1,58 @@
+[package]
+name = "seepic-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Pure-logic core for the image viewer: decoding, containers, navigation, settings."
+
+[dependencies]
+image.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+
+# Archive backends. CBZ/CBR/CB7/CBT are just ZIP/RAR/7Z/TAR under other names.
+zip = { version = "9.0.4", default-features = false, features = [
+    "deflate",
+    "bzip2",
+    "lzma",
+    "xz",
+    "zstd",
+    "deflate64",
+    "ppmd",
+    "aes-crypto",
+    "time",
+] }
+sevenz-rust2 = "0.24"
+unrar = "0.5.8"
+tar = "0.4.46"
+kamadak-exif = "0.6.1"
+trash = "5.2.9"
+# `rayon` spreads a large resize across cores: reducing a 24-megapixel photo is
+# the most expensive thing a page turn does, and the kernels are already SIMD.
+fast_image_resize = { version = "5.1.4", features = ["rayon"] }
+jpeg-decoder = "0.3.2"
+# The second JPEG decoder, for the files the first cannot scale: progressive
+# images. `image` already pulls this one in, so it costs nothing extra.
+zune-jpeg = "0.5"
+zune-core = "0.5"
+# `image` pulls this in too. It is used directly for animated WebP, because
+# `image`'s own frame iterator is not `Send` and a long animation has to be
+# decoded frame by frame on a background thread while the viewer plays what has
+# already arrived.
+image-webp = "0.2.4"
+
+# The swap store: frames live in mapped temporary files instead of the heap, so
+# the process's private working set does not grow with the images it holds.
+# `tempfile` opens its files delete-on-close with share-delete on Windows, which
+# is what lets a mapped file still be deleted.
+memmap2 = "0.9"
+tempfile = "3"
+
+# The natural sort that agrees with the rest of the system asks Windows for its
+# own comparison; nothing else in the core needs the platform.
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.48", features = ["Win32_UI_Shell"] }
+
