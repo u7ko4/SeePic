@@ -18,12 +18,16 @@ mod contact_sheet;
 mod context_menu;
 mod converter;
 mod drop_fallback;
+mod file_assoc;
+mod format_icons;
 mod menu_bar;
 mod panels;
 mod password_dialog;
 mod perf;
 mod printing;
+mod registry;
 mod render_cache;
+mod shell_menu;
 mod status_bar;
 mod shell_open;
 mod slideshow;
@@ -43,8 +47,7 @@ use app::ViewerApp;
 #[global_allocator]
 static ALLOCATOR: trace_alloc::Counting = trace_alloc::Counting;
 
-/// Initial window size, in logical pixels.
-const WINDOW_SIZE: (f32, f32) = (1280., 860.);
+use seepic_core::settings::{MIN_WINDOW_SIZE, Settings};
 
 /// Record a panic where it can still be read after the window is gone.
 ///
@@ -93,10 +96,23 @@ fn main() {
         app::bind_keys(cx);
 
         // Open whatever was passed on the command line, so the app can be
-        // registered as the handler for image and comic file types.
-        let initial = std::env::args_os().nth(1).map(std::path::PathBuf::from);
+        // registered as the handler for image and comic file types. The
+        // Explorer context menu adds `--convert` to open the batch converter
+        // on the selection instead of just browsing it.
+        let mut initial = None;
+        let mut start_in_converter = false;
+        for argument in std::env::args_os().skip(1) {
+            let text = argument.to_string_lossy();
+            if text == "--convert" {
+                start_in_converter = true;
+            } else if !text.starts_with("--") && initial.is_none() {
+                initial = Some(std::path::PathBuf::from(argument));
+            }
+        }
 
-        let (w, h) = WINDOW_SIZE;
+        // The window opens at the size it was last closed at, unless the user
+        // turned that off; the viewer itself loads the same settings below.
+        let (w, h) = Settings::load().initial_window_size();
         let options = WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(Bounds::centered(
                 None,
@@ -107,12 +123,15 @@ fn main() {
             // the window narrows (see `menu_bar::MENUS_MIN_WIDTH` and the
             // status bar's widths), so the floor is what the window buttons,
             // the title and the status bar's icon row need together.
-            window_min_size: Some(size(px(360.), px(400.))),
+            window_min_size: Some(size(
+                px(MIN_WINDOW_SIZE.0),
+                px(MIN_WINDOW_SIZE.1),
+            )),
             ..TitleBar::window_options()
         };
 
         gpui_kit::open_window(options, cx, move |_window, cx| {
-            cx.new(|cx| ViewerApp::new(initial.clone(), cx))
+            cx.new(|cx| ViewerApp::new(initial.clone(), start_in_converter, cx))
         })
         .expect("failed to open the main window");
     });

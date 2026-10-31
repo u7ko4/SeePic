@@ -15,7 +15,9 @@ use seepic_core::cache::{CacheKey, CachedImage, Detail, ImageCache};
 use seepic_core::decode::{self, DecodedImage};
 use seepic_core::effects::Adjustments;
 use seepic_core::metadata::ImageInfo;
-use seepic_core::settings::{ChromeMode, Group, MouseSlot, Settings, ThumbnailView, WheelAction};
+use seepic_core::settings::{
+    ChromeMode, Group, MIN_WINDOW_SIZE, MouseSlot, Settings, ThumbnailView, WheelAction,
+};
 use seepic_core::{
     BackgroundMode, Container, ContainerKind, ContainerRef, Navigator, Orientation, Point as IvPoint,
     IntervalUnit, Size as IvSize, Slideshow, SortKey, SortOrder,
@@ -79,6 +81,11 @@ const MIN_ANIM_FRAME_MS: u32 = 20;
 /// Long enough to reach for the pause button after moving the mouse, short
 /// enough that the controls are not part of the picture.
 const ANIM_BAR_IDLE_MS: u64 = 2500;
+/// How long after the last resize the window size is written to disk.
+///
+/// A drag produces a resize event per frame; the file is only worth rewriting
+/// once the pointer has settled.
+const WINDOW_SIZE_SAVE_DELAY: Duration = Duration::from_millis(400);
 /// Default width of the search results' page-number column.
 ///
 /// Wide enough for `9999/9999`; the divider in the column header changes it.
@@ -467,6 +474,11 @@ pub struct ViewerApp {
     info_window_subscription: Option<Subscription>,
     /// Persistent configuration and the settings overlay state.
     pub settings: Settings,
+    /// The context-menu state last written to the registry, so a settings
+    /// change only rewrites it when something relevant changed.
+    applied_shell_menu: Option<crate::shell_menu::Config>,
+    /// Why the last context-menu write failed, shown on the settings page.
+    pub shell_menu_error: Option<String>,
     /// Decoded images, so navigating back and forth does not re-decode.
     cache: ImageCache,
     /// Where decoded frames live: heap pages, or the mapped slot files the
@@ -489,6 +501,9 @@ pub struct ViewerApp {
     dialog_focus: FocusHandle,
     /// The image converter dialog, with its batch progress.
     pub convert: Option<crate::converter::ConvertDialog>,
+    /// Set when the converter was opened from the Explorer menu for one file:
+    /// only that file is converted, not the whole folder around it.
+    convert_only: Option<String>,
     /// Page-turn animation in progress, with when it started.
     page_turn: Option<(seepic_core::PageTurnFx, Instant)>,
 
@@ -616,6 +631,12 @@ pub struct ViewerApp {
     /// window is out of sight, so the background work checks this before it
     /// spends a decode on it.
     window_minimized: bool,
+    /// Whether the close-time flush hook is installed.
+    window_size_tracking: bool,
+    /// When the size last changed, for the debounced write.
+    window_size_changed_at: Option<Instant>,
+    /// A save task is already waiting, so further resizes only move its deadline.
+    window_size_timer_pending: bool,
     /// The order the navigator sorts by.
     pub sort_order: SortOrder,
     /// Saved locations.
@@ -700,7 +721,11 @@ fn unit_for(interval: &seepic_core::Interval) -> IntervalUnit {
 }
 
 impl ViewerApp {
-    pub fn new(initial: Option<PathBuf>, cx: &mut Context<Self>) -> Self {
+    pub fn new(
+        initial: Option<PathBuf>,
+        start_in_converter: bool,
+        cx: &mut Context<Self>,
+    ) -> Self {
         // Loaded first: the slideshow starts from the interval it was left at.
         let settings = Settings::load();
         // Read before the settings are moved into the app.
@@ -764,6 +789,8 @@ impl ViewerApp {
             info_window: None,
             info_window_subscription: None,
             settings,
+            applied_shell_menu: None,
+            shell_menu_error: None,
             cache: ImageCache::new(600 * 1024 * 1024),
             swap: seepic_core::swap::FrameStore::new(swap_config),
             render_cache: RenderCache::new(600 * 1024 * 1024),
@@ -774,6 +801,7 @@ impl ViewerApp {
             password_focus: cx.focus_handle(),
             dialog: None,
             convert: None,
+            convert_only: None,
             page_turn: None,
             dialog_focus: cx.focus_handle(),
             password_tried: false,
@@ -819,6 +847,9 @@ impl ViewerApp {
             anim_bar_hovered: false,
             anim_bar_timer_pending: false,
             window_minimized: false,
+            window_size_tracking: false,
+            window_size_changed_at: None,
+            window_size_timer_pending: false,
             sort_order,
             bookmarks: Vec::new(),
             navigator_selection: 0,
@@ -848,7 +879,24 @@ impl ViewerApp {
         app.apply_settings();
 
         if let Some(path) = initial {
+            // The Explorer "convert" verb passes one file. Browsing still
+            // works normally, but the batch should start on that file rather
+            // than every image in the folder; a folder or archive argument
+            // keeps its natural meaning of converting the whole container.
+            let single = if start_in_converter
+                && path.is_file()
+                && !seepic_core::is_archive_extension(&path.to_string_lossy())
+            {
+                path.file_name()
+                    .map(|name| name.to_string_lossy().into_owned())
+            } else {
+                None
+            };
             app.open_path(&path, cx);
+            if start_in_converter && app.has_images() {
+                app.convert_only = single;
+                app.convert = Some(crate::converter::ConvertDialog::new());
+            }
         }
 
         app
@@ -1151,8 +1199,16 @@ impl ViewerApp {
                     .iter()
                     .position(|c| c.path() == target.as_path());
 
-                let mut navigator =
-                    Navigator::with_order(self.sort_order, self.boundary_action());
+                // The new container decides which boundary policy applies. Read
+                // it from the local `container`: `self.container` still points
+                // at the one being replaced, so asking `boundary_action()` here
+                // would give the new navigator the previous kind's policy.
+                let boundary = if container.kind().is_archive() {
+                    self.settings.archive_boundary_action
+                } else {
+                    self.settings.boundary_action
+                };
+                let mut navigator = Navigator::with_order(self.sort_order, boundary);
                 navigator.set_entries(container.entries().to_vec());
                 if let Some(name) = wanted {
                     if let Some(index) = navigator
@@ -2913,6 +2969,13 @@ impl ViewerApp {
 
     /// Copy configuration into the fields the viewer reads every frame.
     pub fn apply_settings(&mut self) {
+        // The navigator keeps its own copy so the core can step without the
+        // app; it has to be pushed here or a boundary change made in the
+        // settings panel would not take effect until the container is
+        // reopened. `Wrap` is the one that bites: the navigator wraps inside
+        // `step` and never reaches `at_boundary`, which is the live reader.
+        let boundary = self.boundary_action();
+        self.navigator.set_boundary(boundary);
         self.zoom.stretch_small = self.settings.stretch_small;
         // Turning the swap store on, off, or to another size takes effect for
         // the next frame decoded; frames already in slot files keep working.
@@ -2930,6 +2993,20 @@ impl ViewerApp {
         // pages cannot crowd out the ones around the cursor.
         self.cache
             .set_max_entries(self.settings.cache_pages() as usize);
+
+        // The Explorer menu lives in the registry, so it is only rewritten
+        // when one of its own switches changed — every other setting still
+        // calls `settings_changed` dozens of times a session.
+        let menu = crate::shell_menu::Config::from_settings(&self.settings);
+        if self.applied_shell_menu != Some(menu) {
+            match crate::shell_menu::apply(menu) {
+                Ok(()) => {
+                    self.applied_shell_menu = Some(menu);
+                    self.shell_menu_error = None;
+                }
+                Err(error) => self.shell_menu_error = Some(error),
+            }
+        }
     }
 
     /// Change the browse mode, probing page dimensions when the new mode needs
@@ -3361,9 +3438,11 @@ impl ViewerApp {
             return;
         }
         let target_dir = PathBuf::from(folder);
-        if !target_dir.is_dir() {
+        // The default folder may not exist on a fresh profile; creating it is
+        // what makes the standard location usable without a setup step.
+        if let Err(error) = std::fs::create_dir_all(&target_dir) {
             self.push_toast(
-                format!("目标文件夹不存在: {}", target_dir.display()),
+                format!("无法创建目标文件夹 {}: {error}", target_dir.display()),
                 true,
                 cx,
             );
@@ -4699,6 +4778,7 @@ impl ViewerApp {
             self.push_toast(s::NO_IMAGES_IN_ARCHIVE, true, cx);
             return;
         }
+        self.convert_only = None;
         self.convert = Some(crate::converter::ConvertDialog::new());
         cx.notify();
     }
@@ -4710,6 +4790,7 @@ impl ViewerApp {
             dialog.cancel();
         }
         self.convert = None;
+        self.convert_only = None;
         cx.notify();
     }
 
@@ -4836,11 +4917,13 @@ impl ViewerApp {
             return;
         };
         let key = event.keystroke.key.clone();
+        let modifiers = event.keystroke.modifiers;
         if key == "backspace" {
             dialog.options.prefix.pop();
         } else if key == "escape" {
             self.convert = None;
-        } else if key.chars().count() == 1 {
+            self.convert_only = None;
+        } else if key.chars().count() == 1 && !modifiers.control && !modifiers.alt {
             if let Some(character) = key.chars().next() {
                 // Only characters that are legal in a file name: a prefix with
                 // a slash or a colon would name a path that cannot exist.
@@ -4885,6 +4968,29 @@ impl ViewerApp {
         if total == 0 {
             return;
         }
+
+        // Names come from the navigator, not from the container: an archive
+        // member's backend index is not its entry index, and building the
+        // output name from the wrong one silently renames the output.
+        //
+        // A file passed by the Explorer "convert" verb restricts the batch to
+        // that file; a folder or archive has no `convert_only`, so it converts
+        // everything inside it.
+        let wanted = self.convert_only.clone();
+        let jobs: Vec<(usize, String)> = (0..total)
+            .filter_map(|position| {
+                let source = self.navigator.source_index(position)?;
+                let name = self.navigator.entries().get(position)?.file_name().to_string();
+                Some((source, name))
+            })
+            .filter(|(_, name)| wanted.as_ref().is_none_or(|wanted| wanted == name))
+            .collect();
+        let total = jobs.len();
+        if total == 0 {
+            self.push_toast("没有可转换的图像", true, cx);
+            return;
+        }
+
         let cancelled = Arc::new(AtomicBool::new(false));
         dialog.job = Some(crate::converter::ConvertProgress {
             done: 0,
@@ -4893,17 +4999,6 @@ impl ViewerApp {
             cancelled: cancelled.clone(),
         });
         cx.notify();
-
-        // Names come from the navigator, not from the container: an archive
-        // member's backend index is not its entry index, and building the
-        // output name from the wrong one silently renames the output.
-        let jobs: Vec<(usize, String)> = (0..total)
-            .filter_map(|position| {
-                let source = self.navigator.source_index(position)?;
-                let name = self.navigator.entries().get(position)?.file_name().to_string();
-                Some((source, name))
-            })
-            .collect();
 
         cx.spawn(async move |this, cx| {
             for (source, name) in jobs {
@@ -4943,6 +5038,7 @@ impl ViewerApp {
                         .map(|job| (job.done, job.failed, job.cancelled.load(Ordering::Relaxed)))
                         .unwrap_or((0, 0, false));
                     this.convert = None;
+                    this.convert_only = None;
                     cx.notify();
                     summary
                 })
@@ -6203,8 +6299,12 @@ impl ViewerApp {
             return;
         }
         if !Path::new(&folder).is_dir() {
-            self.push_toast(format!("文件夹不存在: {folder}"), true, cx);
-            return;
+            // The default folder is created on first open rather than making
+            // the button fail on a fresh profile.
+            if let Err(error) = std::fs::create_dir_all(&folder) {
+                self.push_toast(format!("无法创建文件夹 {folder}: {error}"), true, cx);
+                return;
+            }
         }
         if !crate::shell_open::open_folder(Path::new(&folder)) {
             self.push_toast("无法打开文件夹", true, cx);
@@ -6225,12 +6325,50 @@ impl ViewerApp {
         }
     }
 
+    /// Put the current file on the clipboard, for a copy or a cut.
+    ///
+    /// This is the file path, not the pixels: Explorer (and SeePic's own
+    /// paste) reads the standard `CF_HDROP` list. See `paste_files`.
+    fn copy_file_to_clipboard(&mut self, cut: bool, cx: &mut Context<Self>) {
+        let Some(path) = self.current_path() else {
+            self.push_toast("没有可复制的文件", true, cx);
+            return;
+        };
+        if !path.is_file() {
+            self.push_toast("当前图像不是文件", true, cx);
+            return;
+        }
+        match image_clipboard::copy_files(&[path], cut) {
+            Ok(()) => self.push_toast(
+                if cut {
+                    "已剪切图像文件"
+                } else {
+                    "已复制图像文件"
+                },
+                false,
+                cx,
+            ),
+            Err(error) => {
+                let verb = if cut { "剪切" } else { "复制" };
+                self.push_toast(format!("{verb}失败: {error}"), true, cx)
+            }
+        }
+    }
+
     /// Take whatever the clipboard holds and show it.
     ///
     /// An image is written to the temp folder and opened as a file, which makes
     /// it behave exactly like any other image — paging, zoom and the info panel
     /// all work without a special "pasted image" source.
     fn paste_from_clipboard(&mut self, cx: &mut Context<Self>) {
+        // Files come first: a copy/cut writes CF_HDROP, and paste should put
+        // them into the folder being viewed rather than merely open the
+        // copied file.
+        if let Some((paths, cut)) = image_clipboard::read_files() {
+            self.paste_files(paths, cut, cx);
+            return;
+        }
+
         let Some(item) = cx.read_from_clipboard() else {
             self.push_toast("剪贴板为空", true, cx);
             return;
@@ -6265,12 +6403,10 @@ impl ViewerApp {
                     return;
                 }
                 ClipboardEntry::ExternalPaths(paths) => {
-                    if let Some(path) = paths.paths().first() {
-                        let path = path.clone();
-                        self.push_toast("已从剪贴板粘贴文件", false, cx);
-                        self.open_path(&path, cx);
-                        return;
-                    }
+                    // Our own reader handles this first; this is the fallback
+                    // when the clipboard was locked at that moment.
+                    self.paste_files(paths.paths().to_vec(), false, cx);
+                    return;
                 }
                 ClipboardEntry::String(text) => {
                     let trimmed = text.text.trim().trim_matches('"');
@@ -6287,6 +6423,127 @@ impl ViewerApp {
         self.push_toast("剪贴板里没有可显示的图像", true, cx);
     }
 
+    /// Copy or move clipboard files into the folder being browsed.
+    ///
+    /// The clipboard comes from Explorer's copy/cut or from this app's own
+    /// commands, so a paste into the current folder is the useful action; with
+    /// no folder open the configured photo folder is the destination. A cut's
+    /// clipboard marker is only cleared once every file moved, so a partial
+    /// failure can be retried.
+    fn paste_files(&mut self, paths: Vec<PathBuf>, cut: bool, cx: &mut Context<Self>) {
+        let target = match self.paste_target() {
+            Ok(target) => target,
+            Err(message) => {
+                self.push_toast(message, true, cx);
+                return;
+            }
+        };
+        if let Err(error) = std::fs::create_dir_all(&target) {
+            self.push_toast(
+                format!("无法创建文件夹 {}: {error}", target.display()),
+                true,
+                cx,
+            );
+            return;
+        }
+
+        let had_container = self.container.is_some();
+        let cursor = self.navigator.cursor();
+        let mut done = 0usize;
+        let mut skipped = 0usize;
+        let mut failed = 0usize;
+        let mut first: Option<PathBuf> = None;
+
+        for path in paths {
+            if !path.is_file() {
+                failed += 1;
+                continue;
+            }
+            if cut && path.parent() == Some(target.as_path()) {
+                // Cutting within the folder the file already lives in is a
+                // no-op; a copy makes the duplicate Explorer would make.
+                skipped += 1;
+                continue;
+            }
+            let Some(name) = path
+                .file_name()
+                .map(|name| name.to_string_lossy().into_owned())
+            else {
+                failed += 1;
+                continue;
+            };
+            let destination = unique_path(&target, &name);
+            let result = if cut {
+                std::fs::rename(&path, &destination).or_else(|_| {
+                    // Across volumes rename fails; copy then delete instead.
+                    std::fs::copy(&path, &destination).and_then(|_| std::fs::remove_file(&path))
+                })
+            } else {
+                std::fs::copy(&path, &destination).map(|_| ())
+            };
+            match result {
+                Ok(()) => {
+                    done += 1;
+                    first.get_or_insert(destination);
+                }
+                Err(_) => failed += 1,
+            }
+        }
+
+        if cut && failed == 0 {
+            image_clipboard::clear_clipboard();
+        }
+
+        let verb = if cut { "移动" } else { "复制" };
+        if failed > 0 {
+            self.push_toast(
+                format!("已{verb} {done} 个文件，{failed} 个失败"),
+                true,
+                cx,
+            );
+        } else if done > 0 {
+            self.push_toast(
+                format!("已{verb} {done} 个文件到 {}", target.display()),
+                false,
+                cx,
+            );
+        } else if skipped > 0 {
+            self.push_toast("文件已在当前文件夹", false, cx);
+        } else {
+            self.push_toast("没有可粘贴的文件", true, cx);
+        }
+
+        if done > 0 {
+            if had_container {
+                self.rescan_after_change(cursor, cx);
+            } else if let Some(path) = first {
+                // With no folder open, showing the pasted image is more useful
+                // than leaving the start page unchanged.
+                self.open_path(&path, cx);
+            }
+        }
+        cx.notify();
+    }
+
+    /// Where a file paste should land.
+    fn paste_target(&self) -> Result<PathBuf, String> {
+        if self.container.is_some() {
+            let Some(container) = self.container.as_ref().and_then(|c| c.lock().ok()) else {
+                return Err("无法读取当前文件夹".to_string());
+            };
+            if container.kind().is_archive() {
+                return Err("不能在压缩包内粘贴文件".to_string());
+            }
+            return Ok(container.path().to_path_buf());
+        }
+
+        let folder = self.settings.photo_folder.trim();
+        if folder.is_empty() {
+            return Err("请先在「设置 → 其他」指定图片文件夹".to_string());
+        }
+        Ok(PathBuf::from(folder))
+    }
+
     // ---- commands ---------------------------------------------------------
 
     /// Run a command. This is the single entry point shared by the keyboard,
@@ -6294,6 +6551,7 @@ impl ViewerApp {
     pub fn execute(&mut self, command: Command, window: &mut Window, cx: &mut Context<Self>) {
         match command {
             Command::Quit => {
+                self.flush_window_size(window);
                 cx.quit();
                 return;
             }
@@ -6764,18 +7022,8 @@ impl ViewerApp {
                 cx.write_to_clipboard(ClipboardItem::new_string(text));
                 self.push_toast("已复制 EXIF 信息", false, cx);
             }
-            Command::CopyFile => match self.current_path() {
-                Some(path) => {
-                    let item = ClipboardItem {
-                        entries: vec![ClipboardEntry::ExternalPaths(
-                            gpui::ExternalPaths(vec![path].into()),
-                        )],
-                    };
-                    cx.write_to_clipboard(item);
-                    self.push_toast("已复制图像文件", false, cx);
-                }
-                None => self.push_toast("没有可复制的文件", true, cx),
-            },
+            Command::CopyFile => self.copy_file_to_clipboard(false, cx),
+            Command::CutFile => self.copy_file_to_clipboard(true, cx),
 
             Command::SlideshowStop => self.stop_slideshow(cx),
             Command::SlideshowToggle => {
@@ -7389,6 +7637,7 @@ impl ViewerApp {
             } else if self.fullscreen {
                 self.toggle_fullscreen(window, cx);
             } else if self.settings.esc_to_exit {
+                self.flush_window_size(window);
                 cx.quit();
             }
             return;
@@ -7765,6 +8014,109 @@ impl ViewerApp {
         cx.notify();
     }
 
+    // ---- remembered window size -------------------------------------------
+
+    /// Watch the window size, installing the close-time flush once.
+    ///
+    /// The size itself is read in the render pass rather than from a bounds
+    /// observer: a native move loop reports its bounds with `bounds_changed`
+    /// from inside an entity update (see `on_window_mouse_move`), and a bounds
+    /// observer would re-enter that update and panic with "already borrowed".
+    fn track_window_size(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.window_size_tracking {
+            self.window_size_tracking = true;
+            // A resize just before closing would otherwise be lost with the
+            // pending debounce.
+            let weak = cx.entity().downgrade();
+            window.on_window_should_close(cx, move |window, cx| {
+                let _ = weak.update(cx, |this, _cx| this.flush_window_size(window));
+                true
+            });
+        }
+        self.observe_window_size(window, cx);
+    }
+
+    /// Record a size change seen by the render pass and schedule the write.
+    fn observe_window_size(&mut self, window: &Window, cx: &mut Context<Self>) {
+        if !self.capture_window_size(window) {
+            return;
+        }
+        self.window_size_changed_at = Some(Instant::now());
+        self.schedule_window_size_save(cx);
+    }
+
+    /// Copy the window's size into the settings, reporting whether it changed.
+    ///
+    /// Maximised and fullscreen bounds are the screen, not a size the user
+    /// chose, so they are left out; restoring the window later records the
+    /// normal size again.
+    fn capture_window_size(&mut self, window: &Window) -> bool {
+        if !self.settings.remember_window_size
+            || window.is_maximized()
+            || window.is_fullscreen()
+        {
+            return false;
+        }
+        let bounds = window.bounds().size;
+        let width = f32::from(bounds.width).round() as u32;
+        let height = f32::from(bounds.height).round() as u32;
+        // The window manager enforces the floor, but a programmatic resize can
+        // still pass through it; such a size is not worth remembering.
+        if width < MIN_WINDOW_SIZE.0 as u32 || height < MIN_WINDOW_SIZE.1 as u32 {
+            return false;
+        }
+        if width == self.settings.window_width && height == self.settings.window_height {
+            return false;
+        }
+        self.settings.window_width = width;
+        self.settings.window_height = height;
+        true
+    }
+
+    /// Write the size once the pointer has settled.
+    fn schedule_window_size_save(&mut self, cx: &mut Context<Self>) {
+        if self.window_size_timer_pending {
+            return;
+        }
+        self.window_size_timer_pending = true;
+        let executor = cx.background_executor().clone();
+        cx.spawn(async move |this, cx| {
+            loop {
+                let wait = this
+                    .update(cx, |this, _cx| {
+                        let Some(changed_at) = this.window_size_changed_at else {
+                            this.window_size_timer_pending = false;
+                            return None;
+                        };
+                        let elapsed = changed_at.elapsed();
+                        if elapsed < WINDOW_SIZE_SAVE_DELAY {
+                            return Some(WINDOW_SIZE_SAVE_DELAY - elapsed);
+                        }
+                        this.window_size_changed_at = None;
+                        this.window_size_timer_pending = false;
+                        let _ = this.settings.save();
+                        None
+                    })
+                    .ok()
+                    .flatten();
+                match wait {
+                    Some(wait) => executor.timer(wait).await,
+                    None => break,
+                }
+            }
+        })
+        .detach();
+    }
+
+    /// Save a size change that has not reached its debounce yet.
+    fn flush_window_size(&mut self, window: &Window) {
+        let pending = self.window_size_changed_at.take().is_some();
+        let changed = self.capture_window_size(window);
+        if pending || changed {
+            let _ = self.settings.save();
+        }
+    }
+
     pub fn on_canvas_mouse_up(&mut self, _event: &MouseUpEvent, _window: &mut Window, cx: &mut Context<Self>) {
         self.last_mouse = None;
         cx.notify();
@@ -7940,6 +8292,9 @@ impl Render for ViewerApp {
         if let Some(hwnd) = native_window_handle(window) {
             drop_fallback::install(hwnd);
         }
+        // Registered here rather than in `new`, which runs before the window
+        // exists; the observer also records the size on its first callback.
+        self.track_window_size(window, cx);
         // Apply one easing step of the grid's wheel scroll, after this frame's
         // deltas have been added to the target and before the list is built.
         self.advance_contact_scroll(window);

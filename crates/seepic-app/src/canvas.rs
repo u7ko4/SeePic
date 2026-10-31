@@ -11,7 +11,6 @@ use std::rc::Rc;
 use std::sync::{Arc, OnceLock};
 
 use gpui_kit::assets::IconName;
-use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::*;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
@@ -481,44 +480,19 @@ fn empty_state(view: &ViewerApp, cx: &mut Context<ViewerApp>) -> impl IntoElemen
     let mark = empty_mark(dark);
 
     centered(
-        v_flex()
-            .items_center()
-            .gap_6()
-            .child(
-                div()
-                    .w(px(180.))
-                    .h(px(180.))
-                    .when_some(mark, |this, mark| {
-                        this.child(
-                            img(ImageSource::Render(mark))
-                                .size_full()
-                                .object_fit(ObjectFit::Contain)
-                                // The same weight as the old placeholder: the
-                                // empty page should not compete with an image.
-                                .opacity(0.42),
-                        )
-                    }),
-            )
-            .child(
-                h_flex()
-                    .gap_2()
-                    .child(
-                        Button::new("empty-open")
-                            .primary()
-                            .label(s::OPEN_FILE)
-                            .icon(IconName::FolderOpen)
-                            .on_click(cx.listener(|this, _: &ClickEvent, window, cx| {
-                                this.execute(Command::OpenFile, window, cx);
-                            })),
-                    )
-                    .child(
-                        Button::new("empty-open-folder")
-                            .label(s::OPEN_FOLDER)
-                            .on_click(cx.listener(|this, _: &ClickEvent, window, cx| {
-                                this.execute(Command::OpenFolder, window, cx);
-                            })),
-                    ),
-            ),
+        div()
+            .w(px(180.))
+            .h(px(180.))
+            .when_some(mark, |this, mark| {
+                this.child(
+                    img(ImageSource::Render(mark))
+                        .size_full()
+                        .object_fit(ObjectFit::Contain)
+                        // The same weight as the old placeholder: the empty
+                        // page should not compete with an image.
+                        .opacity(0.42),
+                )
+            }),
     )
 }
 

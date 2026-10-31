@@ -66,3 +66,11 @@ the compression algorithm.
 licence.** Removing RAR support (the `unrar` dependency and
 `crates/seepic-core/src/archive/rar_backend.rs`) would leave the whole build
 under MIT/Apache-2.0/BSD terms and this notice would no longer be needed.
+
+## Format icons (placeholder)
+
+`assets/formats/*.ico` — the per-format icons shown on the settings page and
+written beside the registered ProgIDs — are placeholder artwork supplied for
+development. They are **not** covered by SeePic's MIT licence. Confirm their
+redistribution rights or replace them with original (or permissively licensed)
+artwork before publishing a release.

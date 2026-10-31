@@ -20,7 +20,7 @@ rfd = "0.17.2"
 # The window handle of the GPUI window, so the chrome row can start a native
 # window drag (GPUI's own `start_window_move` is a no-op on this build).
 raw-window-handle = "0.6"
-windows-sys = { version = "0.48", features = ["Win32_Foundation", "Win32_UI_Shell", "Win32_UI_Shell_Common", "Win32_UI_WindowsAndMessaging", "Win32_UI_Input_KeyboardAndMouse", "Win32_Graphics_Gdi", "Win32_System_DataExchange", "Win32_System_Memory"] }
+windows-sys = { version = "0.48", features = ["Win32_Foundation", "Win32_Security", "Win32_System_Registry", "Win32_UI_Shell", "Win32_UI_Shell_Common", "Win32_UI_WindowsAndMessaging", "Win32_UI_Input_KeyboardAndMouse", "Win32_Graphics_Gdi", "Win32_System_DataExchange", "Win32_System_Memory"] }
 
 [build-dependencies]
 # Compiles assets/app-icon.rc into the executable, so Explorer, the taskbar and

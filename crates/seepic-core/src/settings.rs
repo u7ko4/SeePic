@@ -456,6 +456,12 @@ pub struct Settings {
     pub photo_folder: String,
 
     // ---- 杂项 -----------------------------------------------------------
+    /// Reopen the main window at the size it was last windowed at.
+    pub remember_window_size: bool,
+    /// The last windowed size, in logical pixels. Only read when
+    /// [`Settings::remember_window_size`] is on.
+    pub window_width: u32,
+    pub window_height: u32,
     pub resize_window_to_image: bool,
     pub disable_screensaver: bool,
     pub fix_new_window_pos: bool,
@@ -580,9 +586,12 @@ impl Default for Settings {
             shell_menu_on_background: true,
             shell_preview_icon: false,
 
-            photo_folder: String::new(),
+            photo_folder: Self::default_photo_folder(),
 
             resize_window_to_image: false,
+            remember_window_size: true,
+            window_width: DEFAULT_WINDOW_SIZE.0 as u32,
+            window_height: DEFAULT_WINDOW_SIZE.1 as u32,
             disable_screensaver: false,
             fix_new_window_pos: false,
             video_output: "DirectX12".to_string(),
@@ -606,6 +615,16 @@ impl Default for Settings {
 
 /// The current config shape.
 pub const SCHEMA_VERSION: u32 = 10;
+
+/// The window size used the first time, and whenever remembering the size is off.
+pub const DEFAULT_WINDOW_SIZE: (f32, f32) = (1280., 860.);
+
+/// The floor the main window enforces, matching the window manager's minimum.
+pub const MIN_WINDOW_SIZE: (f32, f32) = (360., 400.);
+
+/// A ceiling for a remembered size, only to reject nonsense from a hand-edited
+/// config; no real display is this large.
+const MAX_WINDOW_EDGE: f32 = 16_384.;
 
 /// The smallest and largest memory budget the settings offer, in megabytes.
 pub const MEMORY_BUDGET_RANGE: (u32, u32) = (64, 4096);
@@ -646,6 +665,21 @@ fn renamed_command_id(stored: &str) -> Option<String> {
 }
 
 impl Settings {
+    /// The standard folder for copied and moved pictures.
+    ///
+    /// `%USERPROFILE%\Pictures\SeePic`. A missing profile yields an empty
+    /// string, which the commands treat as "ask the user to choose" rather
+    /// than inventing a location somewhere unrelated.
+    pub fn default_photo_folder() -> String {
+        let Some(home) = std::env::var_os("USERPROFILE").map(PathBuf::from) else {
+            return String::new();
+        };
+        home.join("Pictures")
+            .join("SeePic")
+            .display()
+            .to_string()
+    }
+
     /// The folder the app keeps its own files in.
     ///
     /// `%APPDATA%\SeePic`, falling back to the working directory when the
@@ -660,6 +694,24 @@ impl Settings {
     /// Where the config file lives.
     pub fn path() -> PathBuf {
         Self::data_dir().join("config.json")
+    }
+
+    /// The size to open the main window at.
+    ///
+    /// A missing, zero or absurd pair falls back to the default rather than
+    /// opening a window that cannot be seen or used.
+    pub fn initial_window_size(&self) -> (f32, f32) {
+        if !self.remember_window_size {
+            return DEFAULT_WINDOW_SIZE;
+        }
+        let width = self.window_width as f32;
+        let height = self.window_height as f32;
+        if !(MIN_WINDOW_SIZE.0..=MAX_WINDOW_EDGE).contains(&width)
+            || !(MIN_WINDOW_SIZE.1..=MAX_WINDOW_EDGE).contains(&height)
+        {
+            return DEFAULT_WINDOW_SIZE;
+        }
+        (width, height)
     }
 
     /// Load from disk, falling back to defaults for anything missing or broken.
@@ -753,6 +805,11 @@ impl Settings {
         if self.schema_version < 8 && self.title_format == TITLE_FORMAT_V7 {
             // The counter moved to the front and the separator became ">".
             self.title_format = Self::default().title_format;
+        }
+        // An empty folder used to mean "not configured"; a standard location
+        // is more useful, and the copy/move commands create it on first use.
+        if self.photo_folder.trim().is_empty() {
+            self.photo_folder = Self::default_photo_folder();
         }
         if self.schema_version < SCHEMA_VERSION {
             self.schema_version = SCHEMA_VERSION;
@@ -996,6 +1053,9 @@ impl Settings {
                 self.stretch_small = defaults.stretch_small;
                 self.always_on_top = defaults.always_on_top;
                 self.snap_windows = defaults.snap_windows;
+                self.remember_window_size = defaults.remember_window_size;
+                self.window_width = defaults.window_width;
+                self.window_height = defaults.window_height;
                 self.resize_window_to_image = defaults.resize_window_to_image;
                 self.fix_new_window_pos = defaults.fix_new_window_pos;
                 self.dpi_scale_image = defaults.dpi_scale_image;
@@ -1279,6 +1339,32 @@ mod tests {
         let text = "\u{feff}{\"memory_budget_mb\":384}";
         let settings = Settings::parse(text).expect("a marked config parses");
         assert_eq!(settings.memory_budget_mb, 384);
+    }
+
+    #[test]
+    fn the_remembered_window_size_round_trips_and_rejects_nonsense() {
+        let mut settings = Settings::default();
+        settings.window_width = 1024;
+        settings.window_height = 700;
+
+        let text = serde_json::to_string(&settings).unwrap();
+        let back: Settings = serde_json::from_str(&text).unwrap();
+        assert_eq!(back.initial_window_size(), (1024., 700.));
+
+        // Turning the preference off opens at the stock size but keeps the
+        // recorded one, so turning it back on restores what was there.
+        settings.remember_window_size = false;
+        assert_eq!(settings.initial_window_size(), DEFAULT_WINDOW_SIZE);
+        assert_eq!((settings.window_width, settings.window_height), (1024, 700));
+
+        settings.remember_window_size = true;
+        settings.window_width = 0;
+        settings.window_height = 0;
+        assert_eq!(
+            settings.initial_window_size(),
+            DEFAULT_WINDOW_SIZE,
+            "a zeroed pair from a hand-edited config must not open an invisible window"
+        );
     }
 
     #[test]
@@ -1599,6 +1685,28 @@ mod tests {
         let json = r#"{"schema_version": 6, "photo_folder_1": "D:/pictures", "photo_folder_2": "E:/more"}"#;
         let settings: Settings = serde_json::from_str(json).unwrap();
         assert_eq!(settings.photo_folder, "D:/pictures");
+    }
+
+    #[test]
+    fn the_photo_folder_defaults_to_the_profile_pictures_folder() {
+        let folder = Settings::default_photo_folder();
+        if std::env::var_os("USERPROFILE").is_some() {
+            let path = std::path::Path::new(&folder);
+            assert_eq!(path.file_name(), Some(std::ffi::OsStr::new("SeePic")));
+            assert_eq!(
+                path.parent().and_then(|parent| parent.file_name()),
+                Some(std::ffi::OsStr::new("Pictures"))
+            );
+        }
+        assert_eq!(Settings::default().photo_folder, folder);
+
+        // A config written while the field was still empty is brought forward
+        // on load, so the copy/move commands have a destination without the
+        // user having to pick one first.
+        let mut settings = Settings::default();
+        settings.photo_folder.clear();
+        settings.migrate();
+        assert_eq!(settings.photo_folder, folder);
     }
 
     #[test]

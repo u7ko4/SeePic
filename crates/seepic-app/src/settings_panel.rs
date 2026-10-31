@@ -183,23 +183,28 @@ fn footer(group: Group, cx: &mut Context<ViewerApp>) -> impl IntoElement {
         .items_center()
         .border_t_1()
         .border_color(theme.border)
-        .child(
-            div()
-                .id("settings-reset")
-                .px_3()
-                .py_1()
-                .rounded(px(6.))
-                .text_sm()
-                .cursor_pointer()
-                .border_1()
-                .border_color(theme.border)
-                .hover(|this| this.bg(theme.button_hover))
-                .child("重置本页")
-                .on_click(cx.listener(move |this, _: &ClickEvent, _window, cx| {
-                    this.settings.reset_group(group);
-                    this.settings_changed(cx);
-                })),
-        )
+        // Associations live in the registry, not in `Settings`; there is
+        // nothing for "reset this page" to reset, and the page has its own
+        // explicit unregister action.
+        .when(group != Group::FileAssoc, |this| {
+            this.child(
+                div()
+                    .id("settings-reset")
+                    .px_3()
+                    .py_1()
+                    .rounded(px(6.))
+                    .text_sm()
+                    .cursor_pointer()
+                    .border_1()
+                    .border_color(theme.border)
+                    .hover(|this| this.bg(theme.button_hover))
+                    .child("重置本页")
+                    .on_click(cx.listener(move |this, _: &ClickEvent, _window, cx| {
+                        this.settings.reset_group(group);
+                        this.settings_changed(cx);
+                    })),
+            )
+        })
         .child(div().flex_1())
         .child(
             div()
@@ -730,7 +735,16 @@ fn interface_page(mut body: Div, view: &ViewerApp, cx: &mut Context<ViewerApp>) 
         .child(toggle_row("窗口吸附", view.settings.snap_windows, cx, |this, cx| {
             this.settings.snap_windows = !this.settings.snap_windows;
             this.settings_changed(cx);
-        }));
+        }))
+        .child(toggle_row(
+            "记住窗口大小",
+            view.settings.remember_window_size,
+            cx,
+            |this, cx| {
+                this.settings.remember_window_size = !this.settings.remember_window_size;
+                this.settings_changed(cx);
+            },
+        ));
     body
 }
 
@@ -1362,116 +1376,326 @@ fn swap_usage_row(view: &ViewerApp, cx: &Context<ViewerApp>) -> AnyElement {
     info_row("交换页占用", text, cx).into_any_element()
 }
 
-/// The format-association table.
+/// The format-association page.
 ///
-/// Rather than writing ProgIDs into the registry, this reports what Windows
-/// currently has and offers a "change" affordance, which on Windows 10+ is the
-/// system Settings page rather than an in-app list.
+/// Association is per-user registry state, so it is read straight from HKCU
+/// and written back there: no elevation, and nothing to keep in sync on disk.
+/// Windows 8 and later keep the user's explicit default in `UserChoice`, which
+/// a program cannot overwrite; the page therefore registers SeePic as a
+/// handler and points at the system page where the user confirms the default.
 fn assoc_page(mut body: Div, _view: &ViewerApp, cx: &mut Context<ViewerApp>) -> Div {
-    body = body.child(page_title("文件关联")).child(
-        div()
-            .pb_2()
-            .text_xs()
-            .text_color(cx.theme().muted_foreground)
-            .child("默认应用由系统设置管理，此处只做展示与跳转。"),
-    );
+    body = body
+        .child(page_title("文件关联"))
+        .child(
+            div()
+                .pb_2()
+                .text_xs()
+                .text_color(cx.theme().muted_foreground)
+                .child(
+                    "把 SeePic 注册为下列格式的打开方式。系统已有默认应用时，\
+                     Windows 10/11 不允许程序直接替换：请在系统设置中选择 SeePic。",
+                ),
+        )
+        .child(
+            h_flex()
+                .w_full()
+                .pb_1()
+                .gap_2()
+                .flex_wrap()
+                .child(primary_button("关联全部格式", cx, register_all_formats))
+                .child(button("解除全部关联", cx, unregister_all_formats))
+                .child(button(
+                    "打开默认应用设置",
+                    cx,
+                    open_system_default_apps,
+                )),
+        );
 
     for (header, extensions) in association_table() {
         body = body.child(section_label(header, cx));
         for extension in extensions {
-            let owner = default_app_for(extension);
-            body = body.child(
-                h_flex()
-                    .w_full()
-                    .px_2()
-                    .py_1()
-                    .gap_3()
-                    .items_center()
-                    .border_b_1()
-                    .border_color(cx.theme().border)
-                    .child(div().w(px(80.)).flex_shrink_0().text_sm().child(extension))
-                    .child(div().flex_1().text_xs().child(owner)),
-            );
+            body = body.child(assoc_row(extension, cx));
         }
     }
 
-    body.child(
-        h_flex()
-            .pt_3()
-            .gap_2()
-            .child(
-                div()
-                    .id("assoc-open")
-                    .px_3()
-                    .py_1()
-                    .rounded(px(6.))
-                    .text_sm()
-                    .cursor_pointer()
-                    .bg(cx.theme().primary)
-                    .text_color(cx.theme().primary_foreground)
-                    .child("打开默认应用设置")
-                    .on_click(cx.listener(|_this, _: &ClickEvent, _window, cx| {
-                        let _ = std::process::Command::new("cmd")
-                            .args(["/C", "start", "", "ms-settings:defaultapps"])
-                            .spawn();
-                        cx.notify();
-                    })),
-            ),
-    )
+    body
 }
 
-/// The extension groups shown in the table.
-fn association_table() -> Vec<(&'static str, Vec<&'static str>)> {
+fn all_formats() -> Vec<&'static str> {
+    association_table()
+        .into_iter()
+        .flat_map(|(_, extensions)| extensions)
+        .collect()
+}
+
+fn register_all_formats(this: &mut ViewerApp, cx: &mut Context<ViewerApp>) {
+    match crate::file_assoc::register_all(&all_formats()) {
+        Ok(count) => this.push_toast(
+            format!("已将 SeePic 注册为 {count} 种格式的打开方式"),
+            false,
+            cx,
+        ),
+        Err(error) => this.push_toast(format!("关联失败：{error}"), true, cx),
+    }
+    cx.notify();
+}
+
+fn unregister_all_formats(this: &mut ViewerApp, cx: &mut Context<ViewerApp>) {
+    match crate::file_assoc::unregister_all(&all_formats()) {
+        Ok(count) => this.push_toast(format!("已解除 {count} 种格式的 SeePic 关联"), false, cx),
+        Err(error) => this.push_toast(format!("解除关联失败：{error}"), true, cx),
+    }
+    cx.notify();
+}
+
+fn open_system_default_apps(this: &mut ViewerApp, cx: &mut Context<ViewerApp>) {
+    if !crate::file_assoc::open_default_apps() {
+        this.push_toast("无法打开系统默认应用设置", true, cx);
+    }
+    cx.notify();
+}
+
+/// One extension, its icon, the app Windows opens it with, and the toggle.
+fn assoc_row(extension: &'static str, cx: &mut Context<ViewerApp>) -> impl IntoElement {
+    let theme = cx.theme().clone();
+    let state = crate::file_assoc::current(extension);
+    let registered = state.registered;
+    let owner = match (&state.owner, state.is_default) {
+        (_, true) => "SeePic".to_string(),
+        (Some(owner), _) => owner.clone(),
+        (None, _) => "未关联".to_string(),
+    };
+    let owner_color = if state.is_default {
+        theme.primary
+    } else if registered {
+        theme.foreground
+    } else {
+        theme.muted_foreground
+    };
+
+    h_flex()
+        .id(format!("assoc-row-{extension}"))
+        .w_full()
+        .px_2()
+        .py_1()
+        .gap_2()
+        .items_center()
+        .border_b_1()
+        .border_color(theme.border)
+        .child(format_icon(extension, cx))
+        .child(
+            div()
+                .w(px(56.))
+                .flex_shrink_0()
+                .text_sm()
+                .child(format!(".{extension}")),
+        )
+        .child(
+            h_flex()
+                .flex_1()
+                .min_w_0()
+                .gap_1()
+                .items_center()
+                .child(
+                    div()
+                        .min_w_0()
+                        .truncate()
+                        .text_xs()
+                        .text_color(owner_color)
+                        .child(owner),
+                )
+                .when(registered && !state.is_default, |this| {
+                    this.child(
+                        div()
+                            .flex_shrink_0()
+                            .text_xs()
+                            .text_color(theme.muted_foreground)
+                            .child("· SeePic 可选"),
+                    )
+                }),
+        )
+        .child(
+            div()
+                .id(format!("assoc-toggle-{extension}"))
+                .px_2()
+                .py_0p5()
+                .rounded(px(4.))
+                .text_xs()
+                .cursor_pointer()
+                .text_color(if registered {
+                    theme.muted_foreground
+                } else {
+                    theme.primary
+                })
+                .hover(|this| this.bg(theme.button_hover))
+                .child(if registered { "解除" } else { "关联" })
+                .on_click(cx.listener(move |this, _: &ClickEvent, _window, cx| {
+                    let outcome = if registered {
+                        crate::file_assoc::unregister(extension)
+                    } else {
+                        crate::file_assoc::register(extension)
+                    };
+                    match outcome {
+                        Ok(()) => this.push_toast(
+                            if registered {
+                                format!(".{extension} 已解除关联")
+                            } else {
+                                format!(".{extension} 已关联到 SeePic")
+                            },
+                            false,
+                            cx,
+                        ),
+                        Err(error) => {
+                            this.push_toast(format!("操作失败：{error}"), true, cx)
+                        }
+                    }
+                    cx.notify();
+                })),
+        )
+}
+
+fn format_icon(extension: &str, cx: &Context<ViewerApp>) -> AnyElement {
+    if let Some(render) = crate::format_icons::render(extension) {
+        return img(ImageSource::Render(render))
+            .size(px(20.))
+            .object_fit(ObjectFit::Contain)
+            .into_any_element();
+    }
+    Icon::new(IconName::FileImage)
+        .size(px(18.))
+        .text_color(cx.theme().muted_foreground)
+        .into_any_element()
+}
+
+/// A filled button for the page's main action.
+fn primary_button(
+    label: &'static str,
+    cx: &mut Context<ViewerApp>,
+    on_click: fn(&mut ViewerApp, &mut Context<ViewerApp>),
+) -> impl IntoElement {
+    let theme = cx.theme().clone();
+    div()
+        .id(label)
+        .px_3()
+        .py_1()
+        .rounded(px(6.))
+        .text_sm()
+        .cursor_pointer()
+        .bg(theme.primary)
+        .text_color(theme.primary_foreground)
+        .hover(|this| this.opacity(0.9))
+        .child(label)
+        .on_click(cx.listener(move |this, _: &ClickEvent, _window, cx| on_click(this, cx)))
+}
+
+/// The formats SeePic can actually open.
+///
+/// The list used to mirror a viewer that handles RAW and editor formats; those
+/// rows registered SeePic for files it cannot decode. Keeping the table equal
+/// to the decoders and archive backends is what makes every association here
+/// an association that works.
+pub(crate) fn association_table() -> Vec<(&'static str, Vec<&'static str>)> {
     vec![
         (
             "通用图像格式",
             vec![
-                "jpg", "jpeg", "jpe", "jfif", "bmp", "gif", "tga", "png", "tif", "tiff", "dds",
-                "pcx", "pbm", "pgm", "ppm", "pnm", "ico",
+                "jpg", "jpeg", "jpe", "jfif", "png", "apng", "gif", "webp", "bmp", "dib", "ico",
+                "tif", "tiff", "tga",
             ],
         ),
-        ("图像编辑器", vec!["psd", "psb", "clip"]),
         (
-            "现代图像格式",
+            "其他图像格式",
             vec![
-                "jp2", "jpc", "jpx", "j2k", "j2c", "jpf", "jpm", "jxr", "hdp", "wdp", "webp",
-                "heic", "heif", "hif", "avif", "avifs", "bpg", "ugoira", "apng", "qoi", "exr",
-                "jxl", "svg", "hdr",
+                "pnm", "pbm", "pgm", "ppm", "pam", "dds", "hdr", "exr", "qoi", "ff", "farbfeld",
             ],
         ),
-        ("漫画压缩包", vec!["cbr", "cbz", "cbt", "cb7"]),
-        (
-            "RAW",
-            vec![
-                "dng", "cr2", "cr3", "crw", "nef", "nrw", "orf", "rw2", "pef", "sr2", "srw",
-                "3fr", "arw", "erf", "kdc", "mef", "mos", "raf", "x3f", "mrw",
-            ],
-        ),
+        ("漫画压缩包", vec!["cbz", "cbr", "cb7", "cbt"]),
+        ("其他压缩包", vec!["zip", "7z", "rar", "tar"]),
     ]
-}
-
-/// Ask Windows which program owns an extension.
-fn default_app_for(extension: &str) -> String {
-    // `assoc` is the only built-in way to read a ProgID; a missing one just
-    // means nothing is associated, which is worth showing rather than hiding.
-    let output = std::process::Command::new("cmd")
-        .args(["/C", "assoc", &format!(".{extension}")])
-        .output();
-    let Ok(output) = output else {
-        return "（未知）".to_string();
-    };
-    let text = String::from_utf8_lossy(&output.stdout);
-    match text.split_once('=') {
-        Some((_, progid)) if !progid.trim().is_empty() => progid.trim().to_string(),
-        _ => "未关联".to_string(),
-    }
 }
 
 /// The file-manager context-menu page.
 fn shell_page(mut body: Div, view: &ViewerApp, cx: &mut Context<ViewerApp>) -> Div {
     let settings = &view.settings;
+
+    // The details are hidden while the master switch is off: a sub-toggle
+    // that cannot reach the registry would look like a setting that does
+    // nothing.
+    let mut options = v_flex().w_full();
+    if settings.shell_menu_enable {
+        options = options
+            .child(section_label("右键菜单项", cx))
+            .child(toggle_row(
+                "浏览图片",
+                settings.shell_menu_viewer,
+                cx,
+                |this, cx| {
+                    this.settings.shell_menu_viewer = !this.settings.shell_menu_viewer;
+                    this.settings_changed(cx);
+                },
+            ))
+            .child(toggle_row(
+                "转换图片",
+                settings.shell_menu_convert,
+                cx,
+                |this, cx| {
+                    this.settings.shell_menu_convert = !this.settings.shell_menu_convert;
+                    this.settings_changed(cx);
+                },
+            ))
+            .child(toggle_row(
+                "转换项仅在按住 Shift 时显示",
+                settings.shell_menu_convert_shift,
+                cx,
+                |this, cx| {
+                    this.settings.shell_menu_convert_shift =
+                        !this.settings.shell_menu_convert_shift;
+                    this.settings_changed(cx);
+                },
+            ))
+            .child(toggle_row(
+                "在文件夹上显示",
+                settings.shell_menu_on_folder,
+                cx,
+                |this, cx| {
+                    this.settings.shell_menu_on_folder = !this.settings.shell_menu_on_folder;
+                    this.settings_changed(cx);
+                },
+            ))
+            .child(toggle_row(
+                "在文件夹空白处显示",
+                settings.shell_menu_on_background,
+                cx,
+                |this, cx| {
+                    this.settings.shell_menu_on_background =
+                        !this.settings.shell_menu_on_background;
+                    this.settings_changed(cx);
+                },
+            ))
+            .child(section_label("菜单图标", cx))
+            .child(toggle_row(
+                "显示程序图标",
+                settings.shell_preview_icon,
+                cx,
+                |this, cx| {
+                    this.settings.shell_preview_icon = !this.settings.shell_preview_icon;
+                    this.settings_changed(cx);
+                },
+            ));
+    }
+
     body = body
         .child(page_title("系统菜单"))
+        .child(
+            div()
+                .pb_2()
+                .text_xs()
+                .text_color(cx.theme().muted_foreground)
+                .child(
+                    "在资源管理器中右键图片、文件夹或文件夹空白处即可看到菜单项。\
+                     设置写入当前用户注册表，切换后立即生效，不需要管理员权限。",
+                ),
+        )
         .child(toggle_row(
             "添加到资源管理器右键菜单",
             settings.shell_menu_enable,
@@ -1481,70 +1705,25 @@ fn shell_page(mut body: Div, view: &ViewerApp, cx: &mut Context<ViewerApp>) -> D
                 this.settings_changed(cx);
             },
         ))
-        .child(section_label("右键菜单项", cx))
-        .child(toggle_row(
-            "浏览图片",
-            settings.shell_menu_viewer,
-            cx,
-            |this, cx| {
-                this.settings.shell_menu_viewer = !this.settings.shell_menu_viewer;
-                this.settings_changed(cx);
-            },
-        ))
-        .child(toggle_row(
-            "转换图片",
-            settings.shell_menu_convert,
-            cx,
-            |this, cx| {
-                this.settings.shell_menu_convert = !this.settings.shell_menu_convert;
-                this.settings_changed(cx);
-            },
-        ))
-        .child(toggle_row(
-            "仅在按住 Shift 时显示",
-            settings.shell_menu_convert_shift,
-            cx,
-            |this, cx| {
-                this.settings.shell_menu_convert_shift = !this.settings.shell_menu_convert_shift;
-                this.settings_changed(cx);
-            },
-        ))
-        .child(toggle_row(
-            "在文件夹上显示",
-            settings.shell_menu_on_folder,
-            cx,
-            |this, cx| {
-                this.settings.shell_menu_on_folder = !this.settings.shell_menu_on_folder;
-                this.settings_changed(cx);
-            },
-        ))
-        .child(toggle_row(
-            "在文件夹空白处显示",
-            settings.shell_menu_on_background,
-            cx,
-            |this, cx| {
-                this.settings.shell_menu_on_background = !this.settings.shell_menu_on_background;
-                this.settings_changed(cx);
-            },
-        ))
-        .child(section_label("缩略图预览", cx))
-        .child(toggle_row(
-            "显示程序图标",
-            settings.shell_preview_icon,
-            cx,
-            |this, cx| {
-                this.settings.shell_preview_icon = !this.settings.shell_preview_icon;
-                this.settings_changed(cx);
-            },
-        ))
+        .child(options)
+        .when_some(view.shell_menu_error.as_ref(), |this, error| {
+            this.child(
+                div()
+                    .px_2()
+                    .py_1()
+                    .text_xs()
+                    .text_color(cx.theme().danger)
+                    .child(format!("无法写入右键菜单：{error}")),
+            )
+        })
         .child(
             div()
                 .pt_2()
                 .text_xs()
                 .text_color(cx.theme().muted_foreground)
                 .child(
-                    "外壳集成需要注册 COM 组件（缩略图提供程序与右键菜单处理器），\
-                     当前构建不包含该组件，因此这里的开关只记录偏好。",
+                    "Windows 11 的经典右键菜单项位于「显示更多选项」中。\
+                     资源管理器缩略图预览需要额外的 COM 组件，当前构建不包含。",
                 ),
         );
     body

@@ -14,7 +14,7 @@ use crate::strings as s;
 
 pub const MENU_WIDTH: f32 = 246.;
 /// Roughly how tall the menu ends up, used to keep it on screen.
-pub const MENU_HEIGHT: f32 = 452.;
+pub const MENU_HEIGHT: f32 = 700.;
 
 /// A menu entry: a command, or a separator when `command` is `None`.
 struct Item {
@@ -23,44 +23,47 @@ struct Item {
     disabled: bool,
 }
 
-fn row(label: &'static str, command: Command) -> Item {
+fn separator() -> Item {
     Item {
-        label,
-        command: Some(command),
-        disabled: false,
+        label: "",
+        command: None,
+        disabled: true,
     }
 }
 
-fn entries() -> Vec<Item> {
+fn entries(view: &ViewerApp) -> Vec<Item> {
+    // Opening something is the one pair of rows that makes sense on an empty
+    // viewer; everything below it acts on the image that is open.
+    let ready = view.has_images();
+    let row = |label: &'static str, command: Command, needs_image: bool| Item {
+        label,
+        command: Some(command),
+        disabled: needs_image && !ready,
+    };
+
     vec![
-        row("复制文件路径", Command::CopyPath),
-        row("复制 EXIF 信息", Command::CopyExif),
-        row("复制图片到剪贴板", Command::CopyImage),
-        row(s::REVEAL_IN_FOLDER, Command::RevealInFolder),
-        Item {
-            label: "",
-            command: None,
-            disabled: true,
-        },
-        row("顺时针旋转 90°", Command::RotateCw),
-        row("逆时针旋转 90°", Command::RotateCcw),
-        row("水平翻转", Command::FlipHorizontal),
-        row("垂直翻转", Command::FlipVertical),
-        row("重置旋转与翻转", Command::ResetTransform),
-        Item {
-            label: "",
-            command: None,
-            disabled: true,
-        },
-        row("开始/暂停幻灯片", Command::SlideshowToggle),
-        row("文件/EXIF 信息", Command::ToggleInfo),
-        Item {
-            label: "",
-            command: None,
-            disabled: true,
-        },
-        row("关闭图像", Command::CloseImage),
-        row("删除文件", Command::DeleteFile),
+        row(Command::OpenFile.label(), Command::OpenFile, false),
+        row(Command::OpenFolder.label(), Command::OpenFolder, false),
+        separator(),
+        row("复制文件路径", Command::CopyPath, true),
+        row("复制 EXIF 信息", Command::CopyExif, true),
+        row("复制图片到剪贴板", Command::CopyImage, true),
+        row("复制图像文件", Command::CopyFile, true),
+        row("剪切图像文件", Command::CutFile, true),
+        row("粘贴", Command::Paste, false),
+        row(s::REVEAL_IN_FOLDER, Command::RevealInFolder, true),
+        separator(),
+        row("顺时针旋转 90°", Command::RotateCw, true),
+        row("逆时针旋转 90°", Command::RotateCcw, true),
+        row("水平翻转", Command::FlipHorizontal, true),
+        row("垂直翻转", Command::FlipVertical, true),
+        row("重置旋转与翻转", Command::ResetTransform, true),
+        separator(),
+        row("开始/暂停幻灯片", Command::SlideshowToggle, true),
+        row("文件/EXIF 信息", Command::ToggleInfo, true),
+        separator(),
+        row("关闭图像", Command::CloseImage, true),
+        row("删除文件", Command::DeleteFile, true),
     ]
 }
 
@@ -82,7 +85,7 @@ pub fn menu_origin(
 /// `chrome` is the height of the title and menu bars, because the menu is drawn
 /// inside the content area but the anchor arrives in window coordinates.
 pub fn render(
-    _view: &ViewerApp,
+    view: &ViewerApp,
     anchor: IvPoint,
     chrome: f32,
     window_width: f32,
@@ -108,9 +111,9 @@ pub fn render(
         .shadow_2xl()
         .text_sm();
 
-    for item in entries() {
+    for item in entries(view) {
         panel = match item.command {
-            Some(command) => panel.child(menu_row(item.label, command, cx)),
+            Some(command) => panel.child(menu_row(item.label, command, item.disabled, cx)),
             None => panel.child(separator_or_pending(item.label, item.disabled, cx)),
         };
     }
@@ -120,7 +123,12 @@ pub fn render(
     panel
 }
 
-fn menu_row(label: &'static str, command: Command, cx: &mut Context<ViewerApp>) -> impl IntoElement {
+fn menu_row(
+    label: &'static str,
+    command: Command,
+    disabled: bool,
+    cx: &mut Context<ViewerApp>,
+) -> impl IntoElement {
     let theme = cx.theme().clone();
     let shortcut = command.binding_label().unwrap_or_default();
 
@@ -128,8 +136,16 @@ fn menu_row(label: &'static str, command: Command, cx: &mut Context<ViewerApp>) 
         .id(label)
         .px_3()
         .py_1p5()
-        .cursor_pointer()
-        .hover(|this| this.bg(theme.list_hover))
+        .text_color(if disabled {
+            theme.muted_foreground.opacity(0.5)
+        } else {
+            theme.popover_foreground
+        })
+        .when(!disabled, |this| {
+            let hover_theme = theme.clone();
+            this.cursor_pointer()
+                .hover(move |this| this.bg(hover_theme.list_hover))
+        })
         .child(
             h_flex()
                 .w_full()
@@ -146,10 +162,12 @@ fn menu_row(label: &'static str, command: Command, cx: &mut Context<ViewerApp>) 
                     )
                 }),
         )
-        .on_click(cx.listener(move |this, _: &ClickEvent, window, cx| {
-            this.context_menu = None;
-            this.execute(command, window, cx);
-        }))
+        .when(!disabled, |this| {
+            this.on_click(cx.listener(move |this, _: &ClickEvent, window, cx| {
+                this.context_menu = None;
+                this.execute(command, window, cx);
+            }))
+        })
 }
 
 fn separator_or_pending(

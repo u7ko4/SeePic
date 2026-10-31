@@ -962,8 +962,8 @@ fn submenu_row(
 fn command_is_available(command: Command, view: &ViewerApp) -> bool {
     use Command::*;
     match command {
-        CloseImage | SaveResized | CopyImage | CopyResized | CopyPath | CopyFile | CopyExif
-        | Paste | BookmarkAdd | LaunchEditor | WallpaperDlg | PopupMeta | Print
+        CloseImage | SaveResized | CopyImage | CopyResized | CopyPath | CopyFile | CutFile
+        | CopyExif | Paste | BookmarkAdd | LaunchEditor | WallpaperDlg | PopupMeta | Print
         | Convert | Rename | DeleteFile | SelectImage => {
             // These need something to act on, except Paste and the pickers.
             matches!(command, Paste | SelectImage | Rename | DeleteFile)
@@ -1079,6 +1079,7 @@ pub fn menu_items(menu: Menu) -> Vec<Item> {
         ],
         Menu::More => vec![
             sub("复制到剪贴板", Menu::Clipboard),
+            cmd(Command::CutFile),
             cmd(Command::Paste),
             cmd(Command::CopyToPhotoFolder),
             cmd(Command::MoveToPhotoFolder),

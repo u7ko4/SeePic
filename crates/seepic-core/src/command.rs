@@ -223,6 +223,8 @@ pub enum Command {
     CopyResized,
     CopyPath,
     CopyFile,
+    /// Put the file on the clipboard marked for a move.
+    CutFile,
     CopyExif,
     Paste,
     CopyToPhotoFolder,
@@ -387,6 +389,7 @@ impl Command {
         Command::CopyResized,
         Command::CopyPath,
         Command::CopyFile,
+        Command::CutFile,
         Command::CopyExif,
         Command::Paste,
         Command::CopyToPhotoFolder,
@@ -473,8 +476,8 @@ impl Command {
                 Group::Bookmark
             }
 
-            CopyImage | CopyResized | CopyPath | CopyFile | CopyExif | Paste | LaunchEditor
-            | WallpaperDlg | PopupMeta => {
+            CopyImage | CopyResized | CopyPath | CopyFile | CutFile | CopyExif | Paste
+            | LaunchEditor | WallpaperDlg | PopupMeta => {
                 Group::Other
             }
         }
@@ -613,6 +616,7 @@ impl Command {
             CopyResized => "复制当前显示的图像",
             CopyPath => "复制文件路径",
             CopyFile => "复制图像文件",
+            CutFile => "剪切图像文件",
             CopyExif => "复制 EXIF 信息",
             Paste => "从剪贴板粘贴",
             CopyToPhotoFolder => "复制到图片文件夹",
@@ -775,6 +779,7 @@ impl Command {
 
             CopyImage => "ctrl-c",
             CopyExif => "ctrl-shift-c",
+            CutFile => "ctrl-x",
             Paste => "ctrl-v",
             CopyToPhotoFolder => "insert",
             MoveToPhotoFolder => "ctrl-insert",
@@ -860,8 +865,8 @@ impl Command {
             InterpolationBicubic, InterpolationLanczos, InterpolationNext, ImageNegative,
             ImageGamma, ImageBrightness, ImageContrast, ImageSaturation, ImageGray, ImageSepia,
             ChannelAll, ChannelR, ChannelG, ChannelB, ChannelA, ChannelNext, ResetImageProc,
-            CopyImage, CopyResized, CopyPath, CopyFile, CopyExif, Paste, CopyToPhotoFolder,
-            MoveToPhotoFolder, OpenPhotoFolder,
+            CopyImage, CopyResized, CopyPath, CopyFile, CutFile, CopyExif, Paste,
+            CopyToPhotoFolder, MoveToPhotoFolder, OpenPhotoFolder,
             BookmarkAdd, BookmarkLoadRecent, ToggleBookmarkWindow,
             SlideshowStop, Slideshow1, Slideshow2, Slideshow3, Slideshow4, Slideshow5, Slideshow6,
             Slideshow7, Slideshow8, Slideshow9, SlideshowCustom, SlideshowToggle,
