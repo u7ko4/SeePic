@@ -28,22 +28,35 @@ pub enum Menu {
     View,
     Image,
     More,
-    /// Only ever a submenu of 更多.
     Clipboard,
+    FileOps,
+    Output,
+    ViewModes,
+    Zoom,
+    Display,
+    Chrome,
+    Rotate,
+    Filters,
+    Interpolation,
+    Adjust,
+    Channels,
+    PhotoFolder,
+    Panels,
+    Tools,
 }
 
 /// The menus the bar itself carries, left to right.
 pub const MENU_COUNT: usize = 4;
 
-/// Every dropdown the bar can show, counting the submenus, so the app can size
-/// its anchor array. Only `MENUS` hang off the bar and are measured; a submenu
-/// takes over the anchor of the menu it hangs from.
-pub const MENU_SLOTS: usize = 5;
+/// Every menu name the bar can show, so the app can size its anchor array.
+/// Only the four top-level menus are measured; a submenu is positioned beside
+/// its parent's row and needs no anchor of its own.
+pub const MENU_SLOTS: usize = 24;
 
 impl Menu {
     /// Whether this menu hangs off another one rather than off the bar.
     pub fn is_submenu(self) -> bool {
-        matches!(self, Menu::Clipboard)
+        !matches!(self, Menu::File | Menu::View | Menu::Image | Menu::More)
     }
 }
 
@@ -82,8 +95,10 @@ impl Item {
 }
 
 /// Height of a clickable menu row, and of a separator.
-const ROW_HEIGHT: f32 = 32.;
+const ROW_HEIGHT: f32 = 24.;
 const SEPARATOR_HEIGHT: f32 = 9.;
+/// Width of a dropdown panel, matching the canvas context menu.
+const DROPDOWN_WIDTH: f32 = 260.;
 
 /// The rows the keyboard can land on: everything but the separators.
 pub fn actionable_rows(menu: Menu) -> Vec<usize> {
@@ -652,6 +667,14 @@ fn menu_button(
                 .on_click(cx.listener(move |this, _: &ClickEvent, _window, cx| {
                     this.toggle_menu(menu);
                     cx.notify();
+                }))
+                // With a dropdown open, sliding across the bar switches to the
+                // menu under the pointer instead of requiring another click.
+                .on_hover(cx.listener(move |this, hovered: &bool, _window, cx| {
+                    if *hovered && this.open_menu.is_some() && this.open_menu != Some(menu) {
+                        this.switch_menu(menu);
+                        cx.notify();
+                    }
                 })),
         )
 }
@@ -694,11 +717,10 @@ pub fn dropdown_overlay(
 ) -> Option<AnyElement> {
     let menu = view.open_menu?;
     let width = f32::from(window.bounds().size.width);
+    let height = f32::from(window.bounds().size.height);
     // Every panel shares one vertical edge, taken from the first menu title.
     // Anchoring each dropdown to its own button made the list jump sideways
-    // when the user moved between 文件/视图/图像/更多, and the submenu added a
-    // further 18 px step to the right. A submenu copies its parent's anchor,
-    // so the same edge covers it too.
+    // when the user moved between 文件/视图/图像/更多.
     let common_x = MENUS
         .iter()
         .filter_map(|(menu, _)| view.menu_anchors.get(*menu as usize).copied().flatten())
@@ -711,51 +733,108 @@ pub fn dropdown_overlay(
         .flatten()
         .map_or(0., |(_, bottom)| bottom);
     let left = if common_x.is_finite() { common_x } else { 8. }
-        .clamp(8., (width - 288.).max(8.));
+        .clamp(8., (width - DROPDOWN_WIDTH).max(8.));
     // The overlay is laid out inside the content area, which itself starts
     // below the chrome when the chrome takes its own rows. Subtracting that
     // offset puts the dropdown directly under the button in both layouts.
     let top = (anchor_bottom - view.chrome_height()).max(0.);
 
-    // The File menu is long enough to run past the bottom of a small window, so
-    // it is bounded and scrolls rather than hiding its last items.
-    let max_height =
-        (f32::from(window.bounds().size.height) - top - view.chrome_height() - 8.).max(120.);
+    let max_height = (height - top - view.chrome_height() - 8.).max(120.);
 
-    // The keyboard highlight may be off-screen; the list owns its own scroll
-    // position, so bringing the row into view happens here rather than by
-    // computing an offset.
-    if let Some(row) = view.highlighted_row() {
-        view.menu_scroll.scroll_to_item(row, ScrollStrategy::Nearest);
+    // The keyboard highlight belongs to whichever panel is active: the parent
+    // while no submenu is open, the submenu otherwise.
+    let parent_items = menu_items(menu);
+    let child = view.menu_submenu.and_then(|submenu| {
+        parent_items
+            .iter()
+            .position(|item| matches!(item, Item::Submenu(_, sub) if *sub == submenu))
+            .map(|index| (submenu, index))
+    });
+    let parent_highlighted = if child.is_some() {
+        None
+    } else {
+        view.highlighted_row()
+    };
+    if child.is_none() {
+        if let Some(row) = view.highlighted_row() {
+            view.menu_scroll.scroll_to_item(row, ScrollStrategy::Nearest);
+        }
     }
 
-    Some(
-        div()
-            .absolute()
-            .top(px(top))
-            .left(px(left))
-            .max_h(px(max_height))
+    let gap = 2.;
+    let panel_width = DROPDOWN_WIDTH;
+    let right_left = left + panel_width + gap;
+    let fits_right = right_left + panel_width <= width - 8.;
+    let left_left = left - gap - panel_width;
+    let fits_left = left_left >= 8.;
+    let root_left = if fits_right || !fits_left {
+        left
+    } else {
+        left_left
+    };
+
+    let parent = dropdown(
+        menu,
+        view,
+        max_height - 8.,
+        parent_highlighted,
+        true,
+        cx,
+    )
+    .into_any_element();
+
+    let root = div()
+        .absolute()
+        .top(px(top))
+        .left(px(root_left))
+        .flex()
+        .items_start()
+        // Swallows clicks and the wheel, so a menu never leaks through to the
+        // image behind it, and keeps its own presses from reaching the root's
+        // dismiss-on-outside-click handler.
+        .occlude()
+        .on_mouse_down(
+            MouseButton::Left,
+            cx.listener(|_this, _: &MouseDownEvent, _window, cx| {
+                cx.stop_propagation();
+            }),
+        );
+
+    let root = if let Some((submenu, index)) = child {
+        let sub_height = 8. + menu_items(submenu)
+            .iter()
+            .map(Item::height)
+            .sum::<f32>();
+        let wanted = 4. + parent_items[..index]
+            .iter()
+            .map(Item::height)
+            .sum::<f32>();
+        let available_below = (height - view.chrome_height() - top - 8.).max(0.);
+        let offset = wanted.min((available_below - sub_height).max(0.));
+        let column = div()
             .flex()
             .flex_col()
-            // Swallows clicks and the wheel, so a menu never leaks through to
-            // the image behind it, and keeps its own presses from reaching the
-            // root's dismiss-on-outside-click handler.
-            .occlude()
-            .on_mouse_down(
-                MouseButton::Left,
-                cx.listener(|_this, _: &MouseDownEvent, _window, cx| {
-                    cx.stop_propagation();
-                }),
-            )
-            .child(dropdown(menu, view, max_height - 8., cx))
-            .into_any_element(),
-    )
+            .w(px(panel_width))
+            .child(div().h(px(offset)))
+            .child(submenu_panel(submenu, view, view.highlighted_row(), cx).into_any_element());
+        if fits_right {
+            root.child(parent).child(div().w(px(gap))).child(column)
+        } else {
+            root.child(column).child(div().w(px(gap))).child(parent)
+        }
+    } else {
+        root.child(parent)
+    };
+
+    Some(root.into_any_element())
 }
 
 fn dropdown(
     menu: Menu,
     view: &ViewerApp,
     available: f32,
+    highlighted: Option<usize>,
+    close_submenu_on_hover: bool,
     cx: &mut Context<ViewerApp>,
 ) -> impl IntoElement {
     let theme = cx.theme().clone();
@@ -766,7 +845,7 @@ fn dropdown(
     let heights: Rc<Vec<gpui::Size<Pixels>>> = Rc::new(
         items
             .iter()
-            .map(|item| gpui::size(px(288.), px(item.height())))
+            .map(|item| gpui::size(px(DROPDOWN_WIDTH), px(item.height())))
             .collect(),
     );
     // A virtual list needs a definite height: it is a scroll viewport, not a box
@@ -774,12 +853,11 @@ fn dropdown(
     // available space when it does not, which is when it scrolls.
     let natural: f32 = items.iter().map(|item| item.height()).sum();
     let height = natural.min(available).max(ROW_HEIGHT);
-    let highlighted = view.highlighted_row();
     let entity = cx.entity();
 
     div()
         .id("menu-dropdown")
-        .w(px(288.))
+        .w(px(DROPDOWN_WIDTH))
         .py_1()
         .rounded(px(8.))
         .overflow_hidden()
@@ -800,18 +878,39 @@ fn dropdown(
                             let item = &items[index];
                             let selected = highlighted == Some(index);
                             match item {
-                                Item::Command(command) => {
-                                    menu_row(*command, command.label(), selected, false, view, cx)
-                                        .into_any_element()
-                                }
-                                Item::Labeled(label, command) => {
-                                    menu_row(*command, label, selected, false, view, cx)
-                                        .into_any_element()
-                                }
-                                Item::Checked(label, command, on) => {
-                                    menu_row(*command, label, selected, *on, view, cx)
-                                        .into_any_element()
-                                }
+                                Item::Command(command) => menu_row(
+                                    format!("menu-{}", command.label()),
+                                    *command,
+                                    command.label(),
+                                    selected,
+                                    false,
+                                    view,
+                                    close_submenu_on_hover,
+                                    cx,
+                                )
+                                .into_any_element(),
+                                Item::Labeled(label, command) => menu_row(
+                                    format!("menu-{label}"),
+                                    *command,
+                                    label,
+                                    selected,
+                                    false,
+                                    view,
+                                    close_submenu_on_hover,
+                                    cx,
+                                )
+                                .into_any_element(),
+                                Item::Checked(label, command, on) => menu_row(
+                                    format!("menu-{label}"),
+                                    *command,
+                                    label,
+                                    selected,
+                                    *on,
+                                    view,
+                                    close_submenu_on_hover,
+                                    cx,
+                                )
+                                .into_any_element(),
                                 Item::Submenu(label, menu) => {
                                     submenu_row(label, *menu, selected, view, cx).into_any_element()
                                 }
@@ -831,13 +930,99 @@ fn dropdown(
         )
 }
 
+/// The panel shown beside an open dropdown for one of its submenu rows.
+///
+/// Submenus are short and have no nested levels, so this uses a plain column
+/// rather than the parent's virtual list; that keeps its own hitboxes and scroll
+/// state out of the parent's.
+fn submenu_panel(
+    menu: Menu,
+    view: &ViewerApp,
+    highlighted: Option<usize>,
+    cx: &mut Context<ViewerApp>,
+) -> impl IntoElement {
+    let theme = cx.theme().clone();
+    let mut items = menu_items(menu);
+    mark_current(view, &mut items);
+
+    let mut panel = v_flex()
+        .id("menu-submenu")
+        .w(px(DROPDOWN_WIDTH))
+        .py_1()
+        .rounded(px(8.))
+        .overflow_hidden()
+        .bg(theme.popover)
+        .text_color(theme.popover_foreground)
+        .border_1()
+        .border_color(theme.border)
+        .shadow_lg()
+        .text_sm();
+
+    for (index, item) in items.iter().enumerate() {
+        let selected = highlighted == Some(index);
+        panel = panel.child(match item {
+            Item::Command(command) => menu_row(
+                format!("sub-{}", command.label()),
+                *command,
+                command.label(),
+                selected,
+                false,
+                view,
+                false,
+                cx,
+            )
+            .into_any_element(),
+            Item::Labeled(label, command) => menu_row(
+                format!("sub-{label}"),
+                *command,
+                label,
+                selected,
+                false,
+                view,
+                false,
+                cx,
+            )
+            .into_any_element(),
+            Item::Checked(label, command, on) => menu_row(
+                format!("sub-{label}"),
+                *command,
+                label,
+                selected,
+                *on,
+                view,
+                false,
+                cx,
+            )
+            .into_any_element(),
+            // There are no nested submenus today; a line is safer than a row
+            // that cannot open anything.
+            Item::Submenu(..) => div()
+                .mx_2()
+                .my_1()
+                .h(px(1.))
+                .bg(cx.theme().border)
+                .into_any_element(),
+            Item::Separator => div()
+                .mx_2()
+                .my_1()
+                .h(px(1.))
+                .bg(cx.theme().border)
+                .into_any_element(),
+        });
+    }
+
+    panel
+}
+
 /// A menu row, optionally carrying a check.
 fn menu_row(
+    id: String,
     command: Command,
     label: &'static str,
     selected: bool,
     checked: bool,
     view: &ViewerApp,
+    close_submenu_on_hover: bool,
     cx: &mut Context<ViewerApp>,
 ) -> impl IntoElement {
     let theme = cx.theme().clone();
@@ -848,7 +1033,7 @@ fn menu_row(
     let enabled = command_is_available(command, view);
 
     div()
-        .id(label)
+        .id(id)
         .flex()
         .w_full()
         .h(px(ROW_HEIGHT))
@@ -903,23 +1088,33 @@ fn menu_row(
                         }),
                 ),
         )
+        .when(enabled && close_submenu_on_hover, |this| {
+            this.on_hover(cx.listener(|this, hovered: &bool, _window, cx| {
+                if *hovered && this.menu_submenu.is_some() {
+                    this.menu_submenu = None;
+                    this.clear_menu_highlight();
+                    cx.notify();
+                }
+            }))
+        })
         .when(enabled, |this| {
             this.on_click(cx.listener(move |this, _: &ClickEvent, window, cx| {
-                this.open_menu = None;
+                this.close_menu();
                 this.execute(command, window, cx);
             }))
         })
 }
 
-/// A row that opens another dropdown, shown as a nested panel.
+/// A row that opens another dropdown, shown as a panel beside this one.
 fn submenu_row(
     label: &'static str,
     menu: Menu,
     selected: bool,
-    _view: &ViewerApp,
+    view: &ViewerApp,
     cx: &mut Context<ViewerApp>,
 ) -> impl IntoElement {
     let theme = cx.theme().clone();
+    let active = view.menu_submenu == Some(menu);
 
     div()
         .id(label)
@@ -928,7 +1123,7 @@ fn submenu_row(
         .h(px(ROW_HEIGHT))
         .items_center()
         .px_3()
-        .when(selected, |this| this.bg(theme.list_active))
+        .when(selected || active, |this| this.bg(theme.list_active))
         .cursor_pointer()
         .hover(|this| this.bg(theme.list_hover))
         .child(
@@ -952,6 +1147,11 @@ fn submenu_row(
                         .text_color(theme.muted_foreground),
                 ),
         )
+        .on_hover(cx.listener(move |this, hovered: &bool, _window, cx| {
+            if *hovered && this.menu_submenu != Some(menu) {
+                this.open_submenu(menu, cx);
+            }
+        }))
         .on_click(cx.listener(move |this, _: &ClickEvent, _window, cx| {
             this.open_submenu(menu, cx);
         }))
@@ -987,6 +1187,9 @@ fn command_is_available(command: Command, view: &ViewerApp) -> bool {
 }
 
 /// The rows of a menu, in order.
+///
+/// The four top-level dropdowns keep only their everyday rows; the rest live
+/// in submenus, so opening one does not turn into a scrolling exercise.
 pub fn menu_items(menu: Menu) -> Vec<Item> {
     match menu {
         Menu::File => vec![
@@ -995,20 +1198,35 @@ pub fn menu_items(menu: Menu) -> Vec<Item> {
             cmd(Command::NewWindow),
             cmd(Command::OpenRecent),
             Item::Separator,
-            cmd(Command::CloseImage),
-            cmd(Command::RevealInFolder),
-            cmd(Command::Rename),
-            cmd(Command::DeleteFile),
-            Item::Separator,
-            cmd(Command::Print),
-            cmd(Command::Convert),
-            Item::Labeled("另存为当前视图", Command::SaveResized),
+            sub("文件操作", Menu::FileOps),
+            sub("输出", Menu::Output),
             Item::Separator,
             cmd(Command::Settings),
             cmd(Command::About),
             cmd(Command::Quit),
         ],
+        Menu::FileOps => vec![
+            cmd(Command::CloseImage),
+            cmd(Command::RevealInFolder),
+            cmd(Command::Rename),
+            cmd(Command::DeleteFile),
+        ],
+        Menu::Output => vec![
+            cmd(Command::Print),
+            cmd(Command::Convert),
+            Item::Labeled("另存为当前视图", Command::SaveResized),
+        ],
         Menu::View => vec![
+            sub("浏览方式", Menu::ViewModes),
+            sub("缩放", Menu::Zoom),
+            sub("显示", Menu::Display),
+            // 界面模式: one choice instead of the switches and locks it replaced.
+            sub("界面模式", Menu::Chrome),
+            Item::Separator,
+            cmd(Command::ToggleFullscreen),
+            cmd(Command::AlwaysOnTop),
+        ],
+        Menu::ViewModes => vec![
             check("100%", Command::ViewMode100, false),
             check("适合窗口", Command::ViewModeFitWindow, false),
             check("适合宽度", Command::ViewModeFitWidth, false),
@@ -1016,51 +1234,64 @@ pub fn menu_items(menu: Menu) -> Vec<Item> {
             check("双页（左→右）", Command::ViewModeTwoL2R, false),
             check("双页（右→左）", Command::ViewModeTwoR2L, false),
             check("Webtoon", Command::ViewModeWebtoon, false),
-            Item::Separator,
+        ],
+        Menu::Zoom => vec![
             cmd(Command::ZoomIn),
             cmd(Command::ZoomOut),
             cmd(Command::ZoomActual),
             cmd(Command::ZoomReset),
             Item::Separator,
-            cmd(Command::ToggleStretchSmall),
-            cmd(Command::ToggleSeparateCover),
-            cmd(Command::ToggleZoomLock),
-            cmd(Command::ToggleScrollLock),
-            Item::Separator,
+            check("拉伸小图", Command::ToggleStretchSmall, false),
+            check("单独封面", Command::ToggleSeparateCover, false),
+            check("固定缩放比例", Command::ToggleZoomLock, false),
+            check("锁定滚动", Command::ToggleScrollLock, false),
+        ],
+        Menu::Display => vec![
             cmd(Command::ToggleTransparentBg),
-            cmd(Command::ToggleThumbnails),
-            cmd(Command::ToggleBorder),
-            cmd(Command::ToggleAnimInfo),
-            Item::Separator,
-            // 界面模式: one choice instead of the switches and locks it replaced.
+            check("缩略图", Command::ToggleThumbnails, false),
+            check("边框", Command::ToggleBorder, false),
+            check("动画信息", Command::ToggleAnimInfo, false),
+        ],
+        Menu::Chrome => vec![
             check("固定界面", Command::ChromeFixed, false),
             check("自动隐藏界面", Command::ChromeAuto, false),
             check("沉浸界面", Command::ChromeImmersive, false),
-            Item::Separator,
-            cmd(Command::ToggleFullscreen),
-            cmd(Command::AlwaysOnTop),
         ],
         Menu::Image => vec![
             check("图像与缩放面板", Command::ToggleImagePanel, false),
             Item::Separator,
-            cmd(Command::RotationNone),
-            cmd(Command::RotationL90),
-            cmd(Command::RotationR90),
-            cmd(Command::Rotation180),
+            sub("旋转与翻转", Menu::Rotate),
+            sub("滤镜", Menu::Filters),
+            sub("插值", Menu::Interpolation),
+            sub("图像调整", Menu::Adjust),
+            sub("颜色通道", Menu::Channels),
+            Item::Separator,
+            cmd(Command::ResetImageProc),
+        ],
+        Menu::Rotate => vec![
+            check("不旋转", Command::RotationNone, false),
+            check("逆时针旋转 90°", Command::RotationL90, false),
+            check("顺时针旋转 90°", Command::RotationR90, false),
+            check("旋转 180°", Command::Rotation180, false),
+            Item::Separator,
             cmd(Command::RotateCw),
             cmd(Command::RotateCcw),
             cmd(Command::FlipHorizontal),
             cmd(Command::FlipVertical),
-            cmd(Command::ResetTransform),
             Item::Separator,
+            cmd(Command::ResetTransform),
+        ],
+        Menu::Filters => vec![
             check("无滤镜", Command::FilterNone, false),
             check("柔化", Command::FilterSoften, false),
             check("柔化 + 锐化", Command::FilterSoftenSharpen, false),
-            Item::Separator,
+        ],
+        Menu::Interpolation => vec![
             check("双线性插值", Command::InterpolationBilinear, false),
             check("双三次插值", Command::InterpolationBicubic, false),
             check("Lanczos 插值", Command::InterpolationLanczos, false),
-            Item::Separator,
+        ],
+        Menu::Adjust => vec![
             cmd(Command::ImageNegative),
             cmd(Command::ImageGamma),
             cmd(Command::ImageBrightness),
@@ -1068,45 +1299,53 @@ pub fn menu_items(menu: Menu) -> Vec<Item> {
             cmd(Command::ImageSaturation),
             cmd(Command::ImageGray),
             cmd(Command::ImageSepia),
-            Item::Separator,
+        ],
+        Menu::Channels => vec![
             check("全部通道", Command::ChannelAll, false),
             check("红通道", Command::ChannelR, false),
             check("绿通道", Command::ChannelG, false),
             check("蓝通道", Command::ChannelB, false),
             check("Alpha 通道", Command::ChannelA, false),
             Item::Separator,
-            cmd(Command::ResetImageProc),
+            cmd(Command::ChannelNext),
         ],
         Menu::More => vec![
-            sub("复制到剪贴板", Menu::Clipboard),
-            cmd(Command::CutFile),
-            cmd(Command::Paste),
-            cmd(Command::CopyToPhotoFolder),
-            cmd(Command::MoveToPhotoFolder),
-            cmd(Command::OpenPhotoFolder),
+            sub("剪贴板", Menu::Clipboard),
+            sub("图片文件夹", Menu::PhotoFolder),
+            sub("面板", Menu::Panels),
+            sub("工具", Menu::Tools),
             Item::Separator,
-            // The panels that used to have a menu of their own.
-            Item::Labeled("文件/EXIF信息", Command::ToggleInfo),
-            check("收藏夹", Command::ToggleBookmarkPanel, false),
-            check("幻灯片播放", Command::ToggleSlideshowPanel, false),
-            // The sort menu and the sort panel were the same thing twice; the
-            // panel is the one that also shows the direction and a preview.
-            Item::Labeled("排序…", Command::ToggleSortPanel),
-            Item::Separator,
-            cmd(Command::LaunchEditor),
-            cmd(Command::WallpaperDlg),
             cmd(Command::BookmarkAdd),
-            Item::Separator,
-            // The palette lists every command with its binding, so it is the
-            // shortcut reference; the row keeps the name it always had.
-            Item::Labeled("快捷键一览", Command::OpenCommandPalette),
         ],
         Menu::Clipboard => vec![
             cmd(Command::CopyImage),
             cmd(Command::CopyResized),
             cmd(Command::CopyPath),
             cmd(Command::CopyFile),
+            cmd(Command::CutFile),
             cmd(Command::CopyExif),
+            Item::Separator,
+            cmd(Command::Paste),
+        ],
+        Menu::PhotoFolder => vec![
+            cmd(Command::CopyToPhotoFolder),
+            cmd(Command::MoveToPhotoFolder),
+            cmd(Command::OpenPhotoFolder),
+        ],
+        Menu::Panels => vec![
+            check("文件/EXIF信息", Command::ToggleInfo, false),
+            check("收藏夹", Command::ToggleBookmarkPanel, false),
+            check("幻灯片播放", Command::ToggleSlideshowPanel, false),
+            // The sort menu and the sort panel were the same thing twice; the
+            // panel is the one that also shows the direction and a preview.
+            Item::Labeled("排序…", Command::ToggleSortPanel),
+        ],
+        Menu::Tools => vec![
+            cmd(Command::LaunchEditor),
+            cmd(Command::WallpaperDlg),
+            // The palette lists every command with its binding, so it is the
+            // shortcut reference; the row keeps the name it always had.
+            Item::Labeled("快捷键一览", Command::OpenCommandPalette),
         ],
     }
 }
@@ -1139,6 +1378,24 @@ pub fn mark_current(view: &ViewerApp, items: &mut [Item]) {
             Command::ToggleBookmarkPanel => view.panel_is(SidePanel::Bookmark),
             Command::ToggleSlideshowPanel => view.panel_is(SidePanel::Slideshow),
             Command::ToggleThumbnails => view.thumbnails_visible(),
+            Command::ToggleStretchSmall => view.settings.stretch_small,
+            Command::ToggleSeparateCover => view.settings.separate_cover,
+            Command::ToggleZoomLock => view.zoom.zoom_locked,
+            Command::ToggleScrollLock => view.zoom.scroll_locked,
+            Command::ToggleBorder => view.settings.show_border,
+            Command::ToggleAnimInfo => view.settings.show_anim_info,
+            Command::RotationNone => {
+                view.orientation.rotation == seepic_core::orientation::Rotation::None
+            }
+            Command::RotationL90 => {
+                view.orientation.rotation == seepic_core::orientation::Rotation::Cw270
+            }
+            Command::RotationR90 => {
+                view.orientation.rotation == seepic_core::orientation::Rotation::Cw90
+            }
+            Command::Rotation180 => {
+                view.orientation.rotation == seepic_core::orientation::Rotation::Cw180
+            }
             Command::FilterNone => view.filter == seepic_core::filters::FilterMode::None,
             Command::FilterSoften => view.filter == seepic_core::filters::FilterMode::Smooth,
             Command::FilterSoftenSharpen => {

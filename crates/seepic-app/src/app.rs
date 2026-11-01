@@ -455,8 +455,10 @@ pub struct ViewerApp {
     slideshow_started: Option<Instant>,
     slideshow_tick: Option<Task<()>>,
 
-    /// Which menu dropdown is open, if any.
+    /// Which top-level menu dropdown is open, if any.
     pub open_menu: Option<Menu>,
+    /// The submenu shown beside `open_menu`, if any.
+    pub menu_submenu: Option<Menu>,
     pub adjustments: Adjustments,
     /// Shown in the info panel; EXIF arrives asynchronously.
     pub info: Option<ImageInfo>,
@@ -494,6 +496,8 @@ pub struct ViewerApp {
     pub settings_group: Group,
     /// Where the canvas context menu is open, in window coordinates.
     pub context_menu: Option<IvPoint>,
+    /// Index of the context-menu row whose submenu is open, if any.
+    pub context_submenu: Option<usize>,
     /// Open password prompt for an encrypted archive.
     pub password_prompt: Option<PasswordPrompt>,
     password_focus: FocusHandle,
@@ -779,6 +783,7 @@ impl ViewerApp {
             slideshow_started: None,
             slideshow_tick: None,
             open_menu: None,
+            menu_submenu: None,
             panel_stack: Vec::new(),
             chrome_drag_armed: false,
             recording_key: None,
@@ -797,6 +802,7 @@ impl ViewerApp {
             show_settings: false,
             settings_group: Group::General,
             context_menu: None,
+            context_submenu: None,
             password_prompt: None,
             password_focus: cx.focus_handle(),
             dialog: None,
@@ -1014,12 +1020,17 @@ impl ViewerApp {
         self.menu_index
     }
 
+    /// Clear the keyboard highlight without closing the menu.
+    pub fn clear_menu_highlight(&mut self) {
+        self.menu_index = None;
+    }
+
     /// Move the menu highlight by one row, wrapping nowhere.
     ///
     /// The highlight walks the rows the keyboard can act on, so separators are
     /// stepped over rather than landing on nothing.
     pub fn move_menu_highlight(&mut self, delta: isize, cx: &mut Context<Self>) {
-        let Some(menu) = self.open_menu else {
+        let Some(menu) = self.menu_submenu.or(self.open_menu) else {
             return;
         };
         let rows = menu_bar::actionable_rows(menu);
@@ -1051,7 +1062,8 @@ impl ViewerApp {
 
     /// Run the highlighted menu row: a command runs, a submenu opens.
     pub fn activate_menu_row(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let (Some(menu), Some(index)) = (self.open_menu, self.menu_index) else {
+        let (Some(menu), Some(index)) = (self.menu_submenu.or(self.open_menu), self.menu_index)
+        else {
             return;
         };
         let items = menu_bar::menu_items(menu);
@@ -1095,27 +1107,19 @@ impl ViewerApp {
         cx.notify();
     }
 
-    /// Open a submenu of the menu that is currently open.
-    ///
-    /// A submenu has no button of its own to be measured, so it takes over the
-    /// anchor of the menu it hangs from: it appears under the same button and
-    /// at the same vertical edge as every other dropdown.
+    /// Open a submenu beside the menu that is currently open.
     pub fn open_submenu(&mut self, menu: Menu, cx: &mut Context<Self>) {
-        if menu.is_submenu()
-            && let Some(parent) = self.open_menu
-            && let Some(anchor) = self.menu_anchors.get(parent as usize).copied().flatten()
-            && let Some(slot) = self.menu_anchors.get_mut(menu as usize)
-        {
-            *slot = Some(anchor);
+        if self.open_menu.is_none() || !menu.is_submenu() {
+            return;
         }
-        self.open_menu = Some(menu);
-        // The keyboard starts fresh at the top of the new list.
+        self.menu_submenu = Some(menu);
+        // The keyboard starts fresh in the new panel; the parent keeps its own
+        // scroll position.
         self.menu_index = None;
-        self.menu_scroll = VirtualListScrollHandle::new();
         cx.notify();
     }
 
-    /// Open a menu, or close it when it is already the open one.
+    /// Open a top-level menu, or close it when it is already the open one.
     ///
     /// Opening also dismisses a docked panel, because the panel is outside the
     /// menu the user just asked for.
@@ -1125,7 +1129,23 @@ impl ViewerApp {
             return;
         }
         self.open_menu = Some(menu);
+        self.menu_submenu = None;
         // The keyboard starts fresh at the top of the new list.
+        self.menu_index = None;
+        self.menu_scroll = VirtualListScrollHandle::new();
+        self.panel_stack.clear();
+    }
+
+    /// Move an already-open menu to another top-level button.
+    ///
+    /// Used when the pointer crosses the menu bar while a dropdown is open: the
+    /// list follows the pointer instead of waiting for another click.
+    pub fn switch_menu(&mut self, menu: Menu) {
+        if menu.is_submenu() || self.open_menu == Some(menu) {
+            return;
+        }
+        self.open_menu = Some(menu);
+        self.menu_submenu = None;
         self.menu_index = None;
         self.menu_scroll = VirtualListScrollHandle::new();
         self.panel_stack.clear();
@@ -1134,6 +1154,7 @@ impl ViewerApp {
     /// Close the menu and forget where the keyboard was.
     pub fn close_menu(&mut self) {
         self.open_menu = None;
+        self.menu_submenu = None;
         self.menu_index = None;
         self.menu_scroll = VirtualListScrollHandle::new();
     }
@@ -5776,6 +5797,7 @@ impl ViewerApp {
             self.panel_stack = vec![panel];
         }
         self.open_menu = None;
+        self.menu_submenu = None;
         cx.notify();
     }
 
@@ -5809,6 +5831,7 @@ impl ViewerApp {
         self.panel_stack.clear();
         self.picker = None;
         self.context_menu = None;
+        self.context_submenu = None;
         self.search = Some(FileSearch::default());
         // A new search starts at the top; the column width is the reader's and
         // is kept between openings.
@@ -5816,6 +5839,7 @@ impl ViewerApp {
         self.search_col_drag = None;
         self.refresh_file_search();
         self.open_menu = None;
+        self.menu_submenu = None;
         cx.notify();
     }
 
@@ -7613,7 +7637,11 @@ impl ViewerApp {
         // there is nothing left to close and the user asked for that.
         if keystroke.key == "escape" {
             cx.stop_propagation();
-            if self.choice.is_some() {
+            if self.context_submenu.take().is_some() {
+                cx.notify();
+            } else if self.context_menu.take().is_some() {
+                cx.notify();
+            } else if self.choice.is_some() {
                 self.close_choice(cx);
             } else if self.picker.is_some() {
                 self.close_command_picker(cx);
@@ -7622,8 +7650,13 @@ impl ViewerApp {
             } else if self.password_prompt.is_some() {
                 self.cancel_password(cx);
             } else if self.open_menu.is_some() {
-                self.close_menu();
-                cx.notify();
+                if self.menu_submenu.take().is_some() {
+                    self.menu_index = None;
+                    cx.notify();
+                } else {
+                    self.close_menu();
+                    cx.notify();
+                }
             } else if self.show_settings {
                 self.show_settings = false;
                 cx.notify();
@@ -7954,20 +7987,20 @@ impl ViewerApp {
         // unmount the menu before a row could receive its click.
         window.focus(&self.focus, cx);
         if let Some(anchor) = self.context_menu {
-            let chrome = self.chrome_height();
-            let (left, top) = crate::context_menu::menu_origin(
+            let inside = crate::context_menu::contains(
+                self,
                 anchor,
-                chrome,
+                self.chrome_height(),
                 f32::from(window.bounds().size.width),
                 f32::from(window.bounds().size.height),
+                IvPoint::new(
+                    f32::from(event.position.x),
+                    f32::from(event.position.y),
+                ),
             );
-            let inside = (f32::from(event.position.x) - left).abs()
-                <= crate::context_menu::MENU_WIDTH
-                && f32::from(event.position.x) >= left
-                && f32::from(event.position.y) - chrome >= top
-                && f32::from(event.position.y) - chrome <= top + crate::context_menu::MENU_HEIGHT;
             if !inside {
                 self.context_menu = None;
+                self.context_submenu = None;
             }
         }
         self.pointer_at_top = f32::from(event.position.y) < TOP_REVEAL;
@@ -8011,6 +8044,7 @@ impl ViewerApp {
             f32::from(event.position.x),
             f32::from(event.position.y),
         ));
+        self.context_submenu = None;
         cx.notify();
     }
 
