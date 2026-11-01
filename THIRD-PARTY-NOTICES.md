@@ -74,3 +74,13 @@ written beside the registered ProgIDs — are placeholder artwork supplied for
 development. They are **not** covered by SeePic's MIT licence. Confirm their
 redistribution rights or replace them with original (or permissively licensed)
 artwork before publishing a release.
+
+## Translation strings (placeholder)
+
+The Japanese, Korean, French, German, Spanish, Russian, Portuguese and
+Traditional Chinese translation tables under `crates/seepic-core/src/i18n/`
+are provisional. Some entries are derived from the language packs shipped with
+BandiView; the rest were translated for SeePic. A missing entry falls back to
+the English key. These translations are **not** covered by SeePic's MIT
+licence: have them reviewed, and confirm the redistribution rights of the
+BandiView-derived entries, before publishing a release.

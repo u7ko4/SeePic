@@ -31,13 +31,13 @@ impl Transparency {
     ];
 
     pub fn label(self) -> &'static str {
-        match self {
-            Transparency::Grid => "网格",
-            Transparency::White => "白色",
-            Transparency::Black => "黑色",
-            Transparency::IgnoreAlpha => "忽略 Alpha",
-            Transparency::BackgroundColor => "使用背景色",
-        }
+        crate::i18n::tr(match self {
+            Transparency::Grid => "Grid",
+            Transparency::White => "White",
+            Transparency::Black => "Black",
+            Transparency::IgnoreAlpha => "Ignore Alpha",
+            Transparency::BackgroundColor => "Use Background Color",
+        })
     }
 
     /// The next treatment in the cycle, for `Alt+T`.

@@ -19,16 +19,18 @@ use crate::strings as s;
 
 /// The interval presets the panel offers: whole seconds first, then the three
 /// sub-second steps the panel is used with most.
-const PRESETS: [(&str, u64); 8] = [
-    ("1 秒", 1000),
-    ("2 秒", 2000),
-    ("3 秒", 3000),
-    ("4 秒", 4000),
-    ("5 秒", 5000),
-    ("300 毫秒", 300),
-    ("500 毫秒", 500),
-    ("800 毫秒", 800),
-];
+fn presets() -> [(&'static str, u64); 8] {
+    [
+        (seepic_core::i18n::tr("1 s"), 1000),
+        (seepic_core::i18n::tr("2 s"), 2000),
+        (seepic_core::i18n::tr("3 s"), 3000),
+        (seepic_core::i18n::tr("4 s"), 4000),
+        (seepic_core::i18n::tr("5 s"), 5000),
+        (seepic_core::i18n::tr("300 ms"), 300),
+        (seepic_core::i18n::tr("500 ms"), 500),
+        (seepic_core::i18n::tr("800 ms"), 800),
+    ]
+}
 
 /// The panel's contents, shown inside the shared modal frame in `panels`.
 pub fn body(view: &ViewerApp, cx: &mut Context<ViewerApp>) -> impl IntoElement {
@@ -41,7 +43,7 @@ pub fn body(view: &ViewerApp, cx: &mut Context<ViewerApp>) -> impl IntoElement {
         .gap_0p5()
         // Two durations, each a grid of the common choices plus a custom one.
         .child(duration_section(
-            s::SLIDESHOW_INTERVAL,
+            s::SLIDESHOW_INTERVAL(),
             "interval",
             config.interval,
             view.slideshow_interval_unit,
@@ -50,7 +52,7 @@ pub fn body(view: &ViewerApp, cx: &mut Context<ViewerApp>) -> impl IntoElement {
             cx,
         ))
         .child(duration_section(
-            s::SLIDESHOW_DURATION,
+            s::SLIDESHOW_DURATION(),
             "display",
             config.display,
             view.slideshow_display_unit,
@@ -59,14 +61,14 @@ pub fn body(view: &ViewerApp, cx: &mut Context<ViewerApp>) -> impl IntoElement {
             cx,
         ))
         .child(div().h(px(1.)).my_2().bg(theme.border))
-        .child(switch_row(s::SLIDESHOW_LOOP, config.loop_playback, cx, |this, value, cx| {
+        .child(switch_row(s::SLIDESHOW_LOOP(), config.loop_playback, cx, |this, value, cx| {
             this.set_slideshow_loop(value, cx);
         }))
-        .child(switch_row(s::SLIDESHOW_RANDOM, config.random, cx, |this, value, cx| {
+        .child(switch_row(s::SLIDESHOW_RANDOM(), config.random, cx, |this, value, cx| {
             this.set_slideshow_random(value, cx);
         }))
         .child(switch_row(
-            s::SLIDESHOW_PROGRESS,
+            s::SLIDESHOW_PROGRESS(),
             config.show_progress,
             cx,
             |this, value, cx| {
@@ -78,7 +80,7 @@ pub fn body(view: &ViewerApp, cx: &mut Context<ViewerApp>) -> impl IntoElement {
         // gets out of the way.
         .child(
             div()
-                .id("slideshow-start")
+                .id("slideshow-startseepic_core::i18n::tr(")
                 .w_full()
                 .mt_2()
                 .py_2()
@@ -92,7 +94,7 @@ pub fn body(view: &ViewerApp, cx: &mut Context<ViewerApp>) -> impl IntoElement {
                 .bg(theme.primary)
                 .text_color(theme.primary_foreground)
                 .hover(|this| this.opacity(0.9))
-                .child(s::SLIDESHOW_START)
+                .child(s::SLIDESHOW_START())
                 .on_click(cx.listener(|this, _: &ClickEvent, _window, cx| {
                     this.start_slideshow(cx);
                     this.close_panel(cx);
@@ -127,7 +129,8 @@ fn duration_grid(
     cx: &mut Context<ViewerApp>,
 ) -> impl IntoElement {
     let mut grid = v_flex().w_full().gap_1().px_1();
-    for row in PRESETS.chunks(4) {
+    let presets = presets();
+    for row in presets.chunks(4) {
         let mut line = h_flex().w_full().gap_1().items_center();
         for (label, millis) in row {
             line = line.child(duration_chip(
@@ -209,8 +212,8 @@ fn custom_row(
     let shown = match unit {
         // In seconds the value is shown with decimals rather than rounded, so
         // 500 ms reads as 0.5 s.
-        IntervalUnit::Seconds => format!("{} {}", format_seconds(millis), s::SECONDS),
-        IntervalUnit::Milliseconds => format!("{millis} {}", s::MILLISECONDS),
+        IntervalUnit::Seconds => format!("){} {}", format_seconds(millis), s::SECONDS()),
+        IntervalUnit::Milliseconds => format!("{millis} {}", s::MILLISECONDS()),
     };
 
     h_flex()
@@ -220,10 +223,10 @@ fn custom_row(
         .px_2()
         .py_1p5()
         .items_center()
-        .child(div().flex_1().text_sm().child(s::SLIDESHOW_CUSTOM))
+        .child(div().flex_1().text_sm().child(s::SLIDESHOW_CUSTOM()))
         .child(unit_button(
             key,
-            s::SECONDS,
+            s::SECONDS(),
             IntervalUnit::Seconds,
             unit == IntervalUnit::Seconds,
             set_unit,
@@ -231,7 +234,7 @@ fn custom_row(
         ))
         .child(unit_button(
             key,
-            s::MILLISECONDS,
+            s::MILLISECONDS(),
             IntervalUnit::Milliseconds,
             unit == IntervalUnit::Milliseconds,
             set_unit,
@@ -373,7 +376,7 @@ fn effect_row(current: PageTurnFx, cx: &mut Context<ViewerApp>) -> impl IntoElem
             div()
                 .text_xs()
                 .text_color(theme.muted_foreground)
-                .child(s::SLIDESHOW_EFFECT),
+                .child(s::SLIDESHOW_EFFECT()),
         )
         .child(
             h_flex()

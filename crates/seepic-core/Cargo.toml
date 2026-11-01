@@ -54,5 +54,5 @@ tempfile = "3"
 # The natural sort that agrees with the rest of the system asks Windows for its
 # own comparison; nothing else in the core needs the platform.
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.48", features = ["Win32_UI_Shell"] }
+windows-sys = { version = "0.48", features = ["Win32_Globalization", "Win32_UI_Shell"] }
 

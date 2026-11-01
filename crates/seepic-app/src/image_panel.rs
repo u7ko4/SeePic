@@ -24,13 +24,13 @@ pub fn body(view: &ViewerApp, cx: &mut Context<ViewerApp>) -> impl IntoElement {
         .px_2()
         .pb_2()
         .child(view_modes(view, cx))
-        .child(section_title("基础滤镜", cx))
+        .child(section_title(seepic_core::i18n::tr("Basic Filters"), cx))
         .child(radio_group(
             FilterMode::ALL.map(|m| (m.label(), view.filter == m)).to_vec(),
             Move::Filter,
             cx,
         ))
-        .child(section_title("插值算法", cx))
+        .child(section_title(seepic_core::i18n::tr("Interpolation"), cx))
         .child(radio_group(
             Interpolation::ALL
                 .map(|i| (i.label(), view.interpolation == i))
@@ -39,7 +39,7 @@ pub fn body(view: &ViewerApp, cx: &mut Context<ViewerApp>) -> impl IntoElement {
             cx,
         ))
         .child(effects_section(view, cx))
-        .child(section_title("缩放", cx))
+        .child(section_title(seepic_core::i18n::tr("Zoom"), cx))
         .child(
             h_flex()
                 .w_full()
@@ -56,21 +56,21 @@ pub fn body(view: &ViewerApp, cx: &mut Context<ViewerApp>) -> impl IntoElement {
                         .child(view.zoom_label_text()),
                 )
                 .child(panel_button("+", Move::ZoomIn, cx))
-                .child(panel_button("重置", Move::ZoomReset, cx)),
+                .child(panel_button(seepic_core::i18n::tr("Reset"), Move::ZoomReset, cx)),
         )
         .child(toggle(
-            "固定缩放比例 (Ctrl+K)",
+            seepic_core::i18n::tr("Lock Zoom (Ctrl+K)"),
             view.zoom.zoom_locked,
             Move::ZoomLock,
             cx,
         ))
         .child(toggle(
-            "固定滚动位置",
+            seepic_core::i18n::tr("Lock Scroll"),
             view.zoom.scroll_locked,
             Move::ScrollLock,
             cx,
         ))
-        .child(section_title("透明背景 (Alt+T)", cx))
+        .child(section_title(seepic_core::i18n::tr("Transparent Background (Alt+T)"), cx))
         .child(radio_group(
             Transparency::ALL
                 .iter()
@@ -99,7 +99,7 @@ fn view_modes(view: &ViewerApp, cx: &mut Context<ViewerApp>) -> impl IntoElement
     let webtoon_width = view.settings.webtoon_width;
 
     v_flex()
-        .child(section_title("浏览方式", cx))
+        .child(section_title(seepic_core::i18n::tr("View Mode"), cx))
         .child(radio_group(
             ViewMode::PANEL
                 .iter()
@@ -112,7 +112,7 @@ fn view_modes(view: &ViewerApp, cx: &mut Context<ViewerApp>) -> impl IntoElement
         // so it is kept when the mode changes.
         .when(webtoon, |this| {
             this.child(stepper(
-                "漫画模式宽度 (%)",
+                seepic_core::i18n::tr("Webtoon Width (%)"),
                 webtoon_width as i32,
                 (10, 400),
                 10,
@@ -122,7 +122,7 @@ fn view_modes(view: &ViewerApp, cx: &mut Context<ViewerApp>) -> impl IntoElement
         })
         .when(two_page, |this| {
             this.child(toggle(
-                "为智能双页使用单独的封面 (Shift+S)",
+                seepic_core::i18n::tr("Separate Cover (Shift+S)"),
                 separate_cover,
                 Move::SeparateCover,
                 cx,
@@ -135,7 +135,7 @@ fn view_modes(view: &ViewerApp, cx: &mut Context<ViewerApp>) -> impl IntoElement
                 .py_1()
                 .justify_between()
                 .items_center()
-                .child(div().text_sm().child("拉伸小图(Z)"))
+                .child(div().text_sm().child(seepic_core::i18n::tr("Stretch Small (Z)")))
                 .child(
                     Switch::new("stretch-small").checked(stretch).on_change(
                         cx.listener(|this, value: &bool, window, cx| {
@@ -169,7 +169,7 @@ fn background_section(view: &ViewerApp, cx: &mut Context<ViewerApp>) -> impl Int
     let has_image = view.settings.background_image.is_some();
 
     v_flex()
-        .child(section_title("背景", cx))
+        .child(section_title(seepic_core::i18n::tr("Background"), cx))
         .child(radio_group(
             BackgroundMode::ALL
                 .iter()
@@ -179,7 +179,7 @@ fn background_section(view: &ViewerApp, cx: &mut Context<ViewerApp>) -> impl Int
             cx,
         ))
         .when(mode == BackgroundMode::Custom, |this| {
-            this.child(swatches("背景色", &background, Move::BackgroundColor, cx))
+            this.child(swatches(seepic_core::i18n::tr("Background Color"), &background, Move::BackgroundColor, cx))
                 .child(
                     h_flex()
                         .w_full()
@@ -195,17 +195,17 @@ fn background_section(view: &ViewerApp, cx: &mut Context<ViewerApp>) -> impl Int
                                 .truncate()
                                 .child(match &view.settings.background_image {
                                     Some(path) => path.clone(),
-                                    None => "未使用背景图片".to_string(),
+                                    None => seepic_core::i18n::tr("No Background Image").to_string(),
                                 }),
                         )
-                        .child(panel_button("选择图片…", Move::PickBackgroundImage, cx))
+                        .child(panel_button(seepic_core::i18n::tr("Choose Image…"), Move::PickBackgroundImage, cx))
                         .when(has_image, |this| {
-                            this.child(panel_button("清除", Move::ClearBackgroundImage, cx))
+                            this.child(panel_button(seepic_core::i18n::tr("Clear"), Move::ClearBackgroundImage, cx))
                         }),
                 )
         })
-        .child(section_title("边框色", cx))
-        .child(swatches("边框色", &border, Move::BorderColor, cx))
+        .child(section_title(seepic_core::i18n::tr("Border Color"), cx))
+        .child(swatches(seepic_core::i18n::tr("Border Color"), &border, Move::BorderColor, cx))
 }
 
 /// A row of preset colours, with the current one ringed.
@@ -413,7 +413,7 @@ fn effects_section(view: &ViewerApp, cx: &mut Context<ViewerApp>) -> impl IntoEl
                     div()
                         .text_xs()
                         .text_color(theme.muted_foreground)
-                        .child("图片效果"),
+                        .child(seepic_core::i18n::tr("Image Effects")),
                 )
                 .child(
                     div()
@@ -426,21 +426,21 @@ fn effects_section(view: &ViewerApp, cx: &mut Context<ViewerApp>) -> impl IntoEl
                         .border_1()
                         .border_color(theme.border)
                         .hover(|this| this.bg(theme.button_hover))
-                        .child("重置")
+                        .child(seepic_core::i18n::tr("Reset"))
                         .on_click(cx.listener(|this, _: &ClickEvent, _window, cx| {
                             this.reset_adjustments(cx);
                         })),
                 ),
         )
-        .child(toggle("负片 (Ctrl+I)", a.negative, Move::Toggle, cx))
-        .child(stepper("伽玛值补偿 (Ctrl+G)", a.gamma, Adjustments::GAMMA_RANGE, 10, Move::Gamma, cx))
-        .child(stepper("亮度", a.brightness, Adjustments::BRIGHTNESS_RANGE, 5, Move::Brightness, cx))
-        .child(stepper("对比度", a.contrast, Adjustments::CONTRAST_RANGE, 5, Move::Contrast, cx))
-        .child(stepper("饱和度", a.saturation, Adjustments::SATURATION_RANGE, 5, Move::Saturation, cx))
-        .child(toggle("垂直翻转 (Ctrl+F)", view.orientation.flip_v, Move::FlipV, cx))
-        .child(toggle("水平翻转 (Ctrl+M)", view.orientation.flip_h, Move::FlipH, cx))
-        .child(toggle("灰度 (Ctrl+Y)", a.grayscale, Move::Gray, cx))
-        .child(toggle("棕褐色 (Ctrl+Shift+S)", a.sepia, Move::Sepia, cx))
+        .child(toggle(seepic_core::i18n::tr("Negative (Ctrl+I)"), a.negative, Move::Toggle, cx))
+        .child(stepper(seepic_core::i18n::tr("Gamma (Ctrl+G)"), a.gamma, Adjustments::GAMMA_RANGE, 10, Move::Gamma, cx))
+        .child(stepper(seepic_core::i18n::tr("Brightness"), a.brightness, Adjustments::BRIGHTNESS_RANGE, 5, Move::Brightness, cx))
+        .child(stepper(seepic_core::i18n::tr("Contrast"), a.contrast, Adjustments::CONTRAST_RANGE, 5, Move::Contrast, cx))
+        .child(stepper(seepic_core::i18n::tr("Saturation"), a.saturation, Adjustments::SATURATION_RANGE, 5, Move::Saturation, cx))
+        .child(toggle(seepic_core::i18n::tr("Flip Vertical (Ctrl+F)"), view.orientation.flip_v, Move::FlipV, cx))
+        .child(toggle(seepic_core::i18n::tr("Flip Horizontal (Ctrl+M)"), view.orientation.flip_h, Move::FlipH, cx))
+        .child(toggle(seepic_core::i18n::tr("Grayscale (Ctrl+Y)"), a.grayscale, Move::Gray, cx))
+        .child(toggle(seepic_core::i18n::tr("Sepia (Ctrl+Shift+S)"), a.sepia, Move::Sepia, cx))
         .child(channel_row(a.channel, cx))
 }
 
@@ -583,7 +583,7 @@ fn channel_row(current: Channel, cx: &mut Context<ViewerApp>) -> impl IntoElemen
         .py_1p5()
         .gap_3()
         .items_center()
-        .child(div().text_sm().child("选择 RGB 通道"));
+        .child(div().text_sm().child(seepic_core::i18n::tr("RGB Channel")));
 
     for channel in Channel::ALL {
         let selected = current == channel;

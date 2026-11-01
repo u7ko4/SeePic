@@ -60,19 +60,21 @@ impl Menu {
     }
 }
 
-const MENUS: [(Menu, &str); MENU_COUNT] = [
-    (Menu::File, s::MENU_FILE),
-    (Menu::View, s::MENU_VIEW),
-    (Menu::Image, s::MENU_IMAGE),
-    (Menu::More, s::MENU_MORE),
-];
+fn menus() -> [(Menu, &'static str); MENU_COUNT] {
+    [
+        (Menu::File, s::MENU_FILE()),
+        (Menu::View, s::MENU_VIEW()),
+        (Menu::Image, s::MENU_IMAGE()),
+        (Menu::More, s::MENU_MORE()),
+    ]
+}
 
 /// One row in a dropdown.
 pub enum Item {
     Command(Command),
     /// A command shown under a label of its own.
     ///
-    /// Used where the row should read like an action ("按名称排序") while doing
+    /// Used where the row should read like an action ("Sort by Name") while doing
     /// something broader (opening the sort panel).
     Labeled(&'static str, Command),
     /// A toggle or one of a radio group: the label, the command, and whether it
@@ -355,7 +357,7 @@ fn bar_row(view: &ViewerApp, window: &Window, cx: &mut Context<ViewerApp>) -> im
         .child(title_content(view, cx));
     if show_menus {
         row = row.child(div().flex_shrink_0().w(px(1.)).h(px(18.)).bg(theme.border));
-        for (menu, label) in MENUS {
+        for (menu, label) in menus() {
             row = row.child(menu_button(menu, label, view, cx));
         }
     }
@@ -425,7 +427,7 @@ fn bar_row(view: &ViewerApp, window: &Window, cx: &mut Context<ViewerApp>) -> im
                 // Children in order, when the menus are drawn: the title
                 // content, the divider, then the menu titles. With the menus
                 // hidden there is no button for a dropdown to hang from.
-                for (index, (menu, _)) in MENUS.iter().enumerate() {
+                for (index, (menu, _)) in menus().iter().enumerate() {
                     let slot = &mut this.menu_anchors[*menu as usize];
                     let wanted = if show_menus {
                         bounds.get(index + 2).map(|bounds| {
@@ -482,7 +484,7 @@ fn title_content(view: &ViewerApp, cx: &mut Context<ViewerApp>) -> impl IntoElem
                     .whitespace_nowrap()
                     .text_xs()
                     .text_color(theme.muted_foreground)
-                    .child(format!(
+                    .child(seepic_core::trf!("Frame {} / {}",
                         "第 {} / {} 帧",
                         view.held_frame().unwrap_or(0) + 1,
                         view.frame_count()
@@ -721,7 +723,7 @@ pub fn dropdown_overlay(
     // Every panel shares one vertical edge, taken from the first menu title.
     // Anchoring each dropdown to its own button made the list jump sideways
     // when the user moved between 文件/视图/图像/更多.
-    let common_x = MENUS
+    let common_x = menus()
         .iter()
         .filter_map(|(menu, _)| view.menu_anchors.get(*menu as usize).copied().flatten())
         .map(|(x, _)| x)
@@ -1198,8 +1200,8 @@ pub fn menu_items(menu: Menu) -> Vec<Item> {
             cmd(Command::NewWindow),
             cmd(Command::OpenRecent),
             Item::Separator,
-            sub("文件操作", Menu::FileOps),
-            sub("输出", Menu::Output),
+            sub(seepic_core::i18n::tr("File Operations"), Menu::FileOps),
+            sub(seepic_core::i18n::tr("Output"), Menu::Output),
             Item::Separator,
             cmd(Command::Settings),
             cmd(Command::About),
@@ -1214,25 +1216,25 @@ pub fn menu_items(menu: Menu) -> Vec<Item> {
         Menu::Output => vec![
             cmd(Command::Print),
             cmd(Command::Convert),
-            Item::Labeled("另存为当前视图", Command::SaveResized),
+            Item::Labeled(seepic_core::i18n::tr("Save As Seen"), Command::SaveResized),
         ],
         Menu::View => vec![
-            sub("浏览方式", Menu::ViewModes),
-            sub("缩放", Menu::Zoom),
-            sub("显示", Menu::Display),
+            sub(seepic_core::i18n::tr("View Mode"), Menu::ViewModes),
+            sub(seepic_core::i18n::tr("Zoom"), Menu::Zoom),
+            sub(seepic_core::i18n::tr("Display"), Menu::Display),
             // 界面模式: one choice instead of the switches and locks it replaced.
-            sub("界面模式", Menu::Chrome),
+            sub(seepic_core::i18n::tr("Chrome"), Menu::Chrome),
             Item::Separator,
             cmd(Command::ToggleFullscreen),
             cmd(Command::AlwaysOnTop),
         ],
         Menu::ViewModes => vec![
             check("100%", Command::ViewMode100, false),
-            check("适合窗口", Command::ViewModeFitWindow, false),
-            check("适合宽度", Command::ViewModeFitWidth, false),
-            check("适合高度", Command::ViewModeFitHeight, false),
-            check("双页（左→右）", Command::ViewModeTwoL2R, false),
-            check("双页（右→左）", Command::ViewModeTwoR2L, false),
+            check(seepic_core::i18n::tr("Fit Window"), Command::ViewModeFitWindow, false),
+            check(seepic_core::i18n::tr("Fit Width"), Command::ViewModeFitWidth, false),
+            check(seepic_core::i18n::tr("Fit Height"), Command::ViewModeFitHeight, false),
+            check(seepic_core::i18n::tr("Two Pages (L→R)"), Command::ViewModeTwoL2R, false),
+            check(seepic_core::i18n::tr("Two Pages (R→L)"), Command::ViewModeTwoR2L, false),
             check("Webtoon", Command::ViewModeWebtoon, false),
         ],
         Menu::Zoom => vec![
@@ -1241,38 +1243,38 @@ pub fn menu_items(menu: Menu) -> Vec<Item> {
             cmd(Command::ZoomActual),
             cmd(Command::ZoomReset),
             Item::Separator,
-            check("拉伸小图", Command::ToggleStretchSmall, false),
-            check("单独封面", Command::ToggleSeparateCover, false),
-            check("固定缩放比例", Command::ToggleZoomLock, false),
-            check("锁定滚动", Command::ToggleScrollLock, false),
+            check(seepic_core::i18n::tr("Stretch Small Images"), Command::ToggleStretchSmall, false),
+            check(seepic_core::i18n::tr("Separate Cover"), Command::ToggleSeparateCover, false),
+            check(seepic_core::i18n::tr("Lock Zoom"), Command::ToggleZoomLock, false),
+            check(seepic_core::i18n::tr("Lock Scroll"), Command::ToggleScrollLock, false),
         ],
         Menu::Display => vec![
             cmd(Command::ToggleTransparentBg),
-            check("缩略图", Command::ToggleThumbnails, false),
-            check("边框", Command::ToggleBorder, false),
-            check("动画信息", Command::ToggleAnimInfo, false),
+            check(seepic_core::i18n::tr("Thumbnails"), Command::ToggleThumbnails, false),
+            check(seepic_core::i18n::tr("Border"), Command::ToggleBorder, false),
+            check(seepic_core::i18n::tr("Animation Info"), Command::ToggleAnimInfo, false),
         ],
         Menu::Chrome => vec![
-            check("固定界面", Command::ChromeFixed, false),
-            check("自动隐藏界面", Command::ChromeAuto, false),
-            check("沉浸界面", Command::ChromeImmersive, false),
+            check(seepic_core::i18n::tr("Fixed Chrome"), Command::ChromeFixed, false),
+            check(seepic_core::i18n::tr("Auto-hide Chrome"), Command::ChromeAuto, false),
+            check(seepic_core::i18n::tr("Immersive Chrome"), Command::ChromeImmersive, false),
         ],
         Menu::Image => vec![
-            check("图像与缩放面板", Command::ToggleImagePanel, false),
+            check(seepic_core::i18n::tr("Image & Zoom Panel"), Command::ToggleImagePanel, false),
             Item::Separator,
-            sub("旋转与翻转", Menu::Rotate),
-            sub("滤镜", Menu::Filters),
-            sub("插值", Menu::Interpolation),
-            sub("图像调整", Menu::Adjust),
-            sub("颜色通道", Menu::Channels),
+            sub(seepic_core::i18n::tr("Rotate & Flip"), Menu::Rotate),
+            sub(seepic_core::i18n::tr("Filter"), Menu::Filters),
+            sub(seepic_core::i18n::tr("Interpolation"), Menu::Interpolation),
+            sub(seepic_core::i18n::tr("Image Adjustments"), Menu::Adjust),
+            sub(seepic_core::i18n::tr("Color Channels"), Menu::Channels),
             Item::Separator,
             cmd(Command::ResetImageProc),
         ],
         Menu::Rotate => vec![
-            check("不旋转", Command::RotationNone, false),
-            check("逆时针旋转 90°", Command::RotationL90, false),
-            check("顺时针旋转 90°", Command::RotationR90, false),
-            check("旋转 180°", Command::Rotation180, false),
+            check(seepic_core::i18n::tr("None"), Command::RotationNone, false),
+            check(seepic_core::i18n::tr("Rotate 90° CCW"), Command::RotationL90, false),
+            check(seepic_core::i18n::tr("Rotate 90° CW"), Command::RotationR90, false),
+            check(seepic_core::i18n::tr("Rotate 180°"), Command::Rotation180, false),
             Item::Separator,
             cmd(Command::RotateCw),
             cmd(Command::RotateCcw),
@@ -1282,14 +1284,14 @@ pub fn menu_items(menu: Menu) -> Vec<Item> {
             cmd(Command::ResetTransform),
         ],
         Menu::Filters => vec![
-            check("无滤镜", Command::FilterNone, false),
-            check("柔化", Command::FilterSoften, false),
-            check("柔化 + 锐化", Command::FilterSoftenSharpen, false),
+            check(seepic_core::i18n::tr("No Filter"), Command::FilterNone, false),
+            check(seepic_core::i18n::tr("Soften"), Command::FilterSoften, false),
+            check(seepic_core::i18n::tr("Soften + Sharpen"), Command::FilterSoftenSharpen, false),
         ],
         Menu::Interpolation => vec![
-            check("双线性插值", Command::InterpolationBilinear, false),
-            check("双三次插值", Command::InterpolationBicubic, false),
-            check("Lanczos 插值", Command::InterpolationLanczos, false),
+            check(seepic_core::i18n::tr("Bilinear Interpolation"), Command::InterpolationBilinear, false),
+            check(seepic_core::i18n::tr("Bicubic Interpolation"), Command::InterpolationBicubic, false),
+            check(seepic_core::i18n::tr("Lanczos Interpolation"), Command::InterpolationLanczos, false),
         ],
         Menu::Adjust => vec![
             cmd(Command::ImageNegative),
@@ -1301,19 +1303,19 @@ pub fn menu_items(menu: Menu) -> Vec<Item> {
             cmd(Command::ImageSepia),
         ],
         Menu::Channels => vec![
-            check("全部通道", Command::ChannelAll, false),
-            check("红通道", Command::ChannelR, false),
-            check("绿通道", Command::ChannelG, false),
-            check("蓝通道", Command::ChannelB, false),
-            check("Alpha 通道", Command::ChannelA, false),
+            check(seepic_core::i18n::tr("All Channels"), Command::ChannelAll, false),
+            check(seepic_core::i18n::tr("Red Channel"), Command::ChannelR, false),
+            check(seepic_core::i18n::tr("Green Channel"), Command::ChannelG, false),
+            check(seepic_core::i18n::tr("Blue Channel"), Command::ChannelB, false),
+            check(seepic_core::i18n::tr("Alpha Channel"), Command::ChannelA, false),
             Item::Separator,
             cmd(Command::ChannelNext),
         ],
         Menu::More => vec![
-            sub("剪贴板", Menu::Clipboard),
-            sub("图片文件夹", Menu::PhotoFolder),
-            sub("面板", Menu::Panels),
-            sub("工具", Menu::Tools),
+            sub(seepic_core::i18n::tr("Clipboard"), Menu::Clipboard),
+            sub(seepic_core::i18n::tr("Photo Folder"), Menu::PhotoFolder),
+            sub(seepic_core::i18n::tr("Panels"), Menu::Panels),
+            sub(seepic_core::i18n::tr("Tools"), Menu::Tools),
             Item::Separator,
             cmd(Command::BookmarkAdd),
         ],
@@ -1333,19 +1335,19 @@ pub fn menu_items(menu: Menu) -> Vec<Item> {
             cmd(Command::OpenPhotoFolder),
         ],
         Menu::Panels => vec![
-            check("文件/EXIF信息", Command::ToggleInfo, false),
-            check("收藏夹", Command::ToggleBookmarkPanel, false),
-            check("幻灯片播放", Command::ToggleSlideshowPanel, false),
+            check(seepic_core::i18n::tr("File / EXIF Info"), Command::ToggleInfo, false),
+            check(seepic_core::i18n::tr("Bookmarks"), Command::ToggleBookmarkPanel, false),
+            check(seepic_core::i18n::tr("Slideshow"), Command::ToggleSlideshowPanel, false),
             // The sort menu and the sort panel were the same thing twice; the
             // panel is the one that also shows the direction and a preview.
-            Item::Labeled("排序…", Command::ToggleSortPanel),
+            Item::Labeled(seepic_core::i18n::tr("Sort…"), Command::ToggleSortPanel),
         ],
         Menu::Tools => vec![
             cmd(Command::LaunchEditor),
             cmd(Command::WallpaperDlg),
             // The palette lists every command with its binding, so it is the
             // shortcut reference; the row keeps the name it always had.
-            Item::Labeled("快捷键一览", Command::OpenCommandPalette),
+            Item::Labeled(seepic_core::i18n::tr("Keyboard Shortcuts"), Command::OpenCommandPalette),
         ],
     }
 }

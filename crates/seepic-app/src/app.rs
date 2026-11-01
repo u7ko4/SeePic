@@ -189,10 +189,10 @@ impl SidePanel {
     /// already labels it.
     pub fn title(self) -> &'static str {
         match self {
-            SidePanel::Image => "图像",
-            SidePanel::Sort => "排序",
-            SidePanel::Slideshow => "幻灯片播放",
-            SidePanel::Bookmark => "收藏夹",
+            SidePanel::Image => seepic_core::i18n::tr("Image"),
+            SidePanel::Sort => seepic_core::i18n::tr("Sort"),
+            SidePanel::Slideshow => seepic_core::i18n::tr("Slideshow"),
+            SidePanel::Bookmark => seepic_core::i18n::tr("Bookmarks"),
         }
     }
 }
@@ -1767,7 +1767,7 @@ impl ViewerApp {
                     let read_started = Instant::now();
                     container
                         .lock()
-                        .map_err(|_| LoadFailure::Other("压缩包状态已损坏".to_string()))
+                        .map_err(|_| LoadFailure::Other(seepic_core::i18n::tr("Archive state is corrupted").to_string()))
                         .and_then(|mut c| {
                             c.read(source).map_err(|error| match error {
                                 seepic_core::ContainerError::Archive(
@@ -1804,7 +1804,7 @@ impl ViewerApp {
                     }
                     match decode::WebPAnimation::new(bytes) {
                         Some(stream) => Opening::Stream(stream),
-                        None => Opening::Failed("WebP 动画无法解码".to_string()),
+                        None => Opening::Failed(seepic_core::i18n::tr("Could not decode the WebP animation").to_string()),
                     }
                 })
                 .await;
@@ -2206,7 +2206,7 @@ impl ViewerApp {
             detail,
             keep_render,
         ) else {
-            self.error = Some("图像数据无效".into());
+            self.error = Some(seepic_core::i18n::tr("Invalid image data").into());
             return;
         };
 
@@ -2660,7 +2660,7 @@ impl ViewerApp {
 
     /// Keep GPUI's theme in step with the 主题 setting.
     ///
-    /// "跟随系统" needs the window's own appearance, which only exists during a
+    /// "Follow System" needs the window's own appearance, which only exists during a
     /// render pass, so the setting is applied here rather than where the rest of
     /// the settings are.
     fn sync_theme(&mut self, window: &Window, cx: &mut Context<Self>) {
@@ -2723,9 +2723,9 @@ impl ViewerApp {
     pub fn zoom_label(&self, window: &Window) -> String {
         match self.zoom.mode() {
             seepic_core::ZoomMode::Auto => match self.view_mode {
-                ViewMode::FitWidth => "适合宽度".to_string(),
-                ViewMode::FitHeight => "适合高度".to_string(),
-                _ => "适合窗口".to_string(),
+                ViewMode::FitWidth => ")适合宽度".to_string(),
+                ViewMode::FitHeight => seepic_core::i18n::tr("Fit Height").to_string(),
+                _ => seepic_core::i18n::tr("Fit Window").to_string(),
             },
             seepic_core::ZoomMode::Factor(_) => {
                 format!("{:.0}%", self.zoom_percent(window))
@@ -2974,8 +2974,7 @@ impl ViewerApp {
                 lines.push(format!("{tag}: {value}"));
             }
         }
-        lines.join("
-")
+        lines.join("\n")
     }
 
     /// Rebuild the info panel: file facts now, EXIF once the worker returns.
@@ -2990,6 +2989,7 @@ impl ViewerApp {
 
     /// Copy configuration into the fields the viewer reads every frame.
     pub fn apply_settings(&mut self) {
+        seepic_core::i18n::set_language(self.settings.effective_language());
         // The navigator keeps its own copy so the core can step without the
         // app; it has to be pushed here or a boundary change made in the
         // settings panel would not take effect until the container is
@@ -3430,12 +3430,12 @@ impl ViewerApp {
     /// Put the visible image on the clipboard as a picture.
     fn copy_image_to_clipboard(&mut self, cx: &mut Context<Self>) {
         let Some((width, height, bgra)) = self.current_bgra() else {
-            self.push_toast("没有可复制的图像", true, cx);
+            self.push_toast(seepic_core::i18n::tr("No image to copy"), true, cx);
             return;
         };
 
         match image_clipboard::copy_bgra(width, height, &bgra) {
-            Ok(()) => self.push_toast("已复制图片到剪贴板", false, cx),
+            Ok(()) => self.push_toast(seepic_core::i18n::tr("Image copied to clipboard"), false, cx),
             Err(error) => self.push_toast(format!("复制失败: {error}"), true, cx),
         }
     }
@@ -3455,7 +3455,7 @@ impl ViewerApp {
     fn store_in_photo_folder(&mut self, move_it: bool, cx: &mut Context<Self>) {
         let folder = self.settings.photo_folder.clone();
         if folder.trim().is_empty() {
-            self.push_toast("请先在「设置 → 其他」指定图片文件夹", true, cx);
+            self.push_toast(seepic_core::i18n::tr("Choose a photo folder in Settings → Other first"), true, cx);
             return;
         }
         let target_dir = PathBuf::from(folder);
@@ -3472,7 +3472,7 @@ impl ViewerApp {
 
         let position = self.navigator.cursor();
         let Some(source_index) = self.navigator.source_index(position) else {
-            self.push_toast("没有可处理的图像", true, cx);
+            self.push_toast(seepic_core::i18n::tr("No image to process"), true, cx);
             return;
         };
         let name = self.entry_name(position);
@@ -3481,7 +3481,7 @@ impl ViewerApp {
             .as_ref()
             .and_then(|container| container.lock().ok().and_then(|c| c.source(source_index)));
         let Some(source) = source else {
-            self.push_toast("没有可处理的图像", true, cx);
+            self.push_toast(seepic_core::i18n::tr("No image to process"), true, cx);
             return;
         };
 
@@ -3504,7 +3504,7 @@ impl ViewerApp {
                 });
                 match bytes {
                     Some(bytes) => std::fs::write(&destination, bytes),
-                    None => Err(std::io::Error::other("无法读取压缩包内图像")),
+                    None => Err(std::io::Error::other(seepic_core::i18n::tr("Could not read the image inside the archive"))),
                 }
             }
         };
@@ -3512,11 +3512,11 @@ impl ViewerApp {
         match result {
             Ok(()) => {
                 let verb = if from_archive {
-                    "已提取到"
+                    seepic_core::i18n::tr("Extracted to")
                 } else if move_it {
-                    "已移动到"
+                    seepic_core::i18n::tr("Moved to")
                 } else {
-                    "已复制到"
+                    seepic_core::i18n::tr("Copied to")
                 };
                 self.push_toast(format!("{verb} {}", target_dir.display()), false, cx);
                 if move_it && !from_archive {
@@ -3622,7 +3622,7 @@ impl ViewerApp {
     fn delete_file_now(&mut self, path: &Path, cursor: usize, cx: &mut Context<Self>) {
         match seepic_core::fileops::delete_to_recycle_bin(path) {
             Ok(()) => {
-                self.push_toast("已移到回收站", false, cx);
+                self.push_toast(seepic_core::i18n::tr("Moved to Recycle Bin"), false, cx);
                 self.rescan_after_change(cursor, cx);
             }
             Err(error) => self.push_toast(format!("删除失败: {error}"), true, cx),
@@ -4615,13 +4615,13 @@ impl ViewerApp {
     /// as it sits on disk.
     fn print_current(&mut self, cx: &mut Context<Self>) {
         let Some((width, height, bgra)) = self.current_bgra() else {
-            self.push_toast("没有可打印的图像", true, cx);
+            self.push_toast(seepic_core::i18n::tr("No image to print"), true, cx);
             return;
         };
         if self.in_archive() {
             // A member has no file of its own, so the temporary copy is the
             // only way to hand it to a printer.
-            self.push_toast("正在准备压缩包内的图像以便打印…", false, cx);
+            self.push_toast(seepic_core::i18n::tr("Preparing images from the archive for printing…"), false, cx);
         }
 
         let dir = self.temp_dir();
@@ -4638,7 +4638,7 @@ impl ViewerApp {
         let path = dir.join(format!("{name}-print.png"));
 
         match crate::printing::print_bgra(&path, width, height, &bgra) {
-            Ok(()) => self.push_toast("已发送到打印程序", false, cx),
+            Ok(()) => self.push_toast(seepic_core::i18n::tr("Sent to printer"), false, cx),
             Err(error) => self.push_toast(format!("打印失败: {error}"), true, cx),
         }
     }
@@ -4730,7 +4730,7 @@ impl ViewerApp {
         use seepic_core::convert::{OutputFormat, encode_bgra};
 
         let Some((width, height, bgra)) = self.current_bgra() else {
-            self.push_toast("没有可保存的图像", true, cx);
+            self.push_toast(seepic_core::i18n::tr("No image to save"), true, cx);
             return;
         };
         let stem = self
@@ -4745,7 +4745,7 @@ impl ViewerApp {
             .unwrap_or_else(|| "image".to_string());
 
         let dialog = rfd::FileDialog::new()
-            .set_title("另存为所见图像")
+            .set_title(seepic_core::i18n::tr("Save As Seen"))
             .set_file_name(format!("{stem}-as-seen.png"))
             .add_filter("PNG", &["png"])
             .add_filter("JPEG", &["jpg", "jpeg"])
@@ -4777,13 +4777,13 @@ impl ViewerApp {
 
     /// Open the recent list.
     pub fn open_recent(&mut self, cx: &mut Context<Self>) {
-        self.push_toast("最近打开：列表即将接入", false, cx);
+        self.push_toast(seepic_core::i18n::tr("Recent: list coming soon"), false, cx);
     }
 
     /// Open another window of the viewer.
     pub fn open_new_window(&mut self, cx: &mut Context<Self>) {
         let Ok(exe) = std::env::current_exe() else {
-            self.push_toast("找不到程序自身", true, cx);
+            self.push_toast(seepic_core::i18n::tr("Could not find the application"), true, cx);
             return;
         };
         if let Err(error) = std::process::Command::new(exe).spawn() {
@@ -4796,7 +4796,7 @@ impl ViewerApp {
     /// Open the converter dialog.
     pub fn open_converter(&mut self, cx: &mut Context<Self>) {
         if !self.has_images() {
-            self.push_toast(s::NO_IMAGES_IN_ARCHIVE, true, cx);
+            self.push_toast(s::NO_IMAGES_IN_ARCHIVE(), true, cx);
             return;
         }
         self.convert_only = None;
@@ -4825,7 +4825,7 @@ impl ViewerApp {
 
     /// Choose the output folder.
     pub fn pick_convert_folder(&mut self, cx: &mut Context<Self>) {
-        let dialog = rfd::FileDialog::new().set_title("选择输出文件夹");
+        let dialog = rfd::FileDialog::new().set_title(seepic_core::i18n::tr("Choose Output Folder"));
         Self::dialog_off_stack(
             cx,
             move || dialog.pick_folder(),
@@ -4976,7 +4976,7 @@ impl ViewerApp {
         // file would fail with the same error.
         if !options.same_folder {
             let Some(dir) = options.output_dir.clone() else {
-                self.push_toast("请先选择输出目录", true, cx);
+                self.push_toast(seepic_core::i18n::tr("Choose an output folder first"), true, cx);
                 return;
             };
             if let Err(error) = std::fs::create_dir_all(&dir) {
@@ -5008,7 +5008,7 @@ impl ViewerApp {
             .collect();
         let total = jobs.len();
         if total == 0 {
-            self.push_toast("没有可转换的图像", true, cx);
+            self.push_toast(seepic_core::i18n::tr("No image to convert"), true, cx);
             return;
         }
 
@@ -5728,7 +5728,7 @@ impl ViewerApp {
                     this.background_image_loading = false;
                     this.settings.background_image = None;
                     let _ = this.settings.save();
-                    this.push_toast("无法读取背景图片".to_string(), true, cx);
+                    this.push_toast(seepic_core::i18n::tr("Could not read the background image").to_string(), true, cx);
                 })
                 .ok();
                 return;
@@ -5824,7 +5824,7 @@ impl ViewerApp {
     /// Open the file search over the current folder or archive.
     pub fn open_file_search(&mut self, cx: &mut Context<Self>) {
         if self.navigator.is_empty() {
-            self.push_toast(s::NO_IMAGES_IN_ARCHIVE, true, cx);
+            self.push_toast(s::NO_IMAGES_IN_ARCHIVE(), true, cx);
             return;
         }
         // One modal at a time.
@@ -6093,7 +6093,7 @@ impl ViewerApp {
             format!(
                 "排序：{}（{}）",
                 order.key.label(),
-                if order.descending { "降序" } else { "升序" }
+                if order.descending { seepic_core::i18n::tr("Descending") } else { seepic_core::i18n::tr("Ascending") }
             ),
             false,
             cx,
@@ -6105,11 +6105,11 @@ impl ViewerApp {
     /// Remember the current image.
     pub fn add_bookmark(&mut self, cx: &mut Context<Self>) {
         let Some(path) = self.current_path() else {
-            self.push_toast("没有可添加的文件", true, cx);
+            self.push_toast(seepic_core::i18n::tr("No file to add"), true, cx);
             return;
         };
         if self.bookmarks.iter().any(|bookmark| bookmark.path == path) {
-            self.push_toast("该文件已在收藏夹中", false, cx);
+            self.push_toast(seepic_core::i18n::tr("This file is already in bookmarks"), false, cx);
             return;
         }
         if self.bookmarks.len() >= self.settings.max_bookmarks as usize {
@@ -6135,7 +6135,7 @@ impl ViewerApp {
 
     pub fn clear_bookmarks(&mut self, cx: &mut Context<Self>) {
         self.bookmarks.clear();
-        self.push_toast("已清空收藏夹", false, cx);
+        self.push_toast(seepic_core::i18n::tr("Bookmarks cleared"), false, cx);
     }
 
     /// Open a bookmark, whether it is a file or a folder.
@@ -6159,7 +6159,7 @@ impl ViewerApp {
     pub fn open_recent_bookmark(&mut self, cx: &mut Context<Self>) {
         match self.bookmarks.last().cloned() {
             Some(_) => self.open_bookmark(self.bookmarks.len() - 1, cx),
-            None => self.push_toast("收藏夹为空", true, cx),
+            None => self.push_toast(seepic_core::i18n::tr("Bookmarks are empty"), true, cx),
         }
     }
 
@@ -6179,7 +6179,7 @@ impl ViewerApp {
             return;
         };
         let Some(source_index) = self.navigator.source_index(position) else {
-            self.push_toast("没有可打开的图像", true, cx);
+            self.push_toast(seepic_core::i18n::tr("No image to open"), true, cx);
             return;
         };
         let name = self.entry_name(position);
@@ -6197,26 +6197,26 @@ impl ViewerApp {
                 match bytes {
                     Some(bytes) => self
                         .temp_path(&name)
-                        .ok_or_else(|| std::io::Error::other("无法创建临时文件"))
+                        .ok_or_else(|| std::io::Error::other(seepic_core::i18n::tr("Could not create a temporary file")))
                         .and_then(|path| std::fs::write(&path, bytes).map(|_| path)),
-                    None => Err(std::io::Error::other("无法读取压缩包内图像")),
+                    None => Err(std::io::Error::other(seepic_core::i18n::tr("Could not read the image inside the archive"))),
                 }
             }
-            None => Err(std::io::Error::other("没有可打开的图像")),
+            None => Err(std::io::Error::other(seepic_core::i18n::tr("No image to open"))),
         };
 
         match target {
             Ok(path) if use_system_default => {
                 if crate::shell_open::open_default(&path) {
-                    let verb = if self.in_archive() { "已解压并用" } else { "已用" };
+                    let verb = if self.in_archive() { seepic_core::i18n::tr("Extracted and opened with") } else { seepic_core::i18n::tr("Used") };
                     self.push_toast(format!("{verb}系统默认程序打开"), false, cx);
                 } else {
-                    self.push_toast("没有可用来打开该文件的程序", true, cx);
+                    self.push_toast(seepic_core::i18n::tr("No application is available to open this file"), true, cx);
                 }
             }
             Ok(path) => match std::process::Command::new(&editor).arg(&path).spawn() {
                 Ok(_) => {
-                    let verb = if self.in_archive() { "已解压并用" } else { "已用" };
+                    let verb = if self.in_archive() { seepic_core::i18n::tr("Extracted and opened with") } else { seepic_core::i18n::tr("Used") };
                     self.push_toast(format!("{verb}{editor} 打开"), false, cx);
                 }
                 Err(error) => self.push_toast(
@@ -6252,7 +6252,7 @@ impl ViewerApp {
     /// means to a user.
     fn set_as_wallpaper(&mut self, cx: &mut Context<Self>) {
         let Some((width, height, bgra)) = self.current_bgra() else {
-            self.push_toast("没有可设为壁纸的图像", true, cx);
+            self.push_toast(seepic_core::i18n::tr("No image for wallpaper"), true, cx);
             return;
         };
         let name = self
@@ -6265,7 +6265,7 @@ impl ViewerApp {
             .map(|s| s.to_string_lossy().into_owned())
             .unwrap_or_else(|| "wallpaper".to_string());
         let Some(path) = self.temp_path(&format!("{stem}.jpg")) else {
-            self.push_toast("无法创建临时文件", true, cx);
+            self.push_toast(seepic_core::i18n::tr("Could not create a temporary file"), true, cx);
             return;
         };
 
@@ -6275,7 +6275,7 @@ impl ViewerApp {
             rgb.extend_from_slice(&[pixel[2], pixel[1], pixel[0]]);
         }
         let Some(buffer) = image::RgbImage::from_raw(width, height, rgb) else {
-            self.push_toast("图像数据无效", true, cx);
+            self.push_toast(seepic_core::i18n::tr("Invalid image data"), true, cx);
             return;
         };
         if let Err(error) = image::DynamicImage::ImageRgb8(buffer).save(&path) {
@@ -6284,7 +6284,7 @@ impl ViewerApp {
         }
 
         match wallpaper::set_wallpaper(&path) {
-            Ok(()) => self.push_toast("已设为桌面壁纸", false, cx),
+            Ok(()) => self.push_toast(seepic_core::i18n::tr("Set as wallpaper"), false, cx),
             Err(error) => self.push_toast(format!("设置壁纸失败: {error}"), true, cx),
         }
     }
@@ -6299,7 +6299,7 @@ impl ViewerApp {
                 Some(PathBuf::from(configured))
             }
         };
-        let mut dialog = rfd::FileDialog::new().set_title("选择图片文件夹");
+        let mut dialog = rfd::FileDialog::new().set_title(seepic_core::i18n::tr("Choose Photo Folder"));
         if let Some(start) = start.filter(|path| path.is_dir()) {
             dialog = dialog.set_directory(start);
         }
@@ -6319,7 +6319,7 @@ impl ViewerApp {
     pub fn open_photo_folder(&mut self, cx: &mut Context<Self>) {
         let folder = self.settings.photo_folder.clone();
         if folder.trim().is_empty() {
-            self.push_toast("请先在「设置 → 其他」指定图片文件夹", true, cx);
+            self.push_toast(seepic_core::i18n::tr("Choose a photo folder in Settings → Other first"), true, cx);
             return;
         }
         if !Path::new(&folder).is_dir() {
@@ -6331,7 +6331,7 @@ impl ViewerApp {
             }
         }
         if !crate::shell_open::open_folder(Path::new(&folder)) {
-            self.push_toast("无法打开文件夹", true, cx);
+            self.push_toast(seepic_core::i18n::tr("Could not open the folder"), true, cx);
         }
     }
 
@@ -6340,11 +6340,11 @@ impl ViewerApp {
     /// Copy what is on screen, rather than the original bitmap.
     fn copy_resized_to_clipboard(&mut self, cx: &mut Context<Self>) {
         let Some((width, height, bgra)) = self.current_bgra() else {
-            self.push_toast("没有可复制的图像", true, cx);
+            self.push_toast(seepic_core::i18n::tr("No image to copy"), true, cx);
             return;
         };
         match image_clipboard::copy_bgra(width, height, &bgra) {
-            Ok(()) => self.push_toast("已复制当前显示的图像", false, cx),
+            Ok(()) => self.push_toast(seepic_core::i18n::tr("Displayed image copied"), false, cx),
             Err(error) => self.push_toast(format!("复制失败: {error}"), true, cx),
         }
     }
@@ -6355,25 +6355,25 @@ impl ViewerApp {
     /// paste) reads the standard `CF_HDROP` list. See `paste_files`.
     fn copy_file_to_clipboard(&mut self, cut: bool, cx: &mut Context<Self>) {
         let Some(path) = self.current_path() else {
-            self.push_toast("没有可复制的文件", true, cx);
+            self.push_toast(seepic_core::i18n::tr("No file to copy"), true, cx);
             return;
         };
         if !path.is_file() {
-            self.push_toast("当前图像不是文件", true, cx);
+            self.push_toast(seepic_core::i18n::tr("The current image is not a file"), true, cx);
             return;
         }
         match image_clipboard::copy_files(&[path], cut) {
             Ok(()) => self.push_toast(
                 if cut {
-                    "已剪切图像文件"
+                    seepic_core::i18n::tr("Image file cut")
                 } else {
-                    "已复制图像文件"
+                    seepic_core::i18n::tr("Image file copied")
                 },
                 false,
                 cx,
             ),
             Err(error) => {
-                let verb = if cut { "剪切" } else { "复制" };
+                let verb = if cut { seepic_core::i18n::tr("Cut") } else { seepic_core::i18n::tr("Copy") };
                 self.push_toast(format!("{verb}失败: {error}"), true, cx)
             }
         }
@@ -6394,7 +6394,7 @@ impl ViewerApp {
         }
 
         let Some(item) = cx.read_from_clipboard() else {
-            self.push_toast("剪贴板为空", true, cx);
+            self.push_toast(seepic_core::i18n::tr("Clipboard is empty"), true, cx);
             return;
         };
 
@@ -6412,12 +6412,12 @@ impl ViewerApp {
                         _ => "png",
                     };
                     let Some(path) = self.temp_path(&format!("clipboard.{extension}")) else {
-                        self.push_toast("无法创建临时文件", true, cx);
+                        self.push_toast(seepic_core::i18n::tr("Could not create a temporary file"), true, cx);
                         return;
                     };
                     match std::fs::write(&path, image.bytes.to_vec()) {
                         Ok(()) => {
-                            self.push_toast("已从剪贴板粘贴图像", false, cx);
+                            self.push_toast(seepic_core::i18n::tr("Pasted image from clipboard"), false, cx);
                             self.open_path(&path, cx);
                         }
                         Err(error) => {
@@ -6436,7 +6436,7 @@ impl ViewerApp {
                     let trimmed = text.text.trim().trim_matches('"');
                     let candidate = PathBuf::from(trimmed);
                     if candidate.exists() {
-                        self.push_toast("已从剪贴板粘贴文件", false, cx);
+                        self.push_toast(seepic_core::i18n::tr("Pasted file from clipboard"), false, cx);
                         self.open_path(&candidate, cx);
                         return;
                     }
@@ -6444,7 +6444,7 @@ impl ViewerApp {
             }
         }
 
-        self.push_toast("剪贴板里没有可显示的图像", true, cx);
+        self.push_toast(seepic_core::i18n::tr("No displayable image on the clipboard"), true, cx);
     }
 
     /// Copy or move clipboard files into the folder being browsed.
@@ -6518,7 +6518,7 @@ impl ViewerApp {
             image_clipboard::clear_clipboard();
         }
 
-        let verb = if cut { "移动" } else { "复制" };
+        let verb = if cut { seepic_core::i18n::tr("Move") } else { seepic_core::i18n::tr("Copy") };
         if failed > 0 {
             self.push_toast(
                 format!("已{verb} {done} 个文件，{failed} 个失败"),
@@ -6532,9 +6532,9 @@ impl ViewerApp {
                 cx,
             );
         } else if skipped > 0 {
-            self.push_toast("文件已在当前文件夹", false, cx);
+            self.push_toast(seepic_core::i18n::tr("File is already in the current folder"), false, cx);
         } else {
-            self.push_toast("没有可粘贴的文件", true, cx);
+            self.push_toast(seepic_core::i18n::tr("No file to paste"), true, cx);
         }
 
         if done > 0 {
@@ -6553,17 +6553,17 @@ impl ViewerApp {
     fn paste_target(&self) -> Result<PathBuf, String> {
         if self.container.is_some() {
             let Some(container) = self.container.as_ref().and_then(|c| c.lock().ok()) else {
-                return Err("无法读取当前文件夹".to_string());
+                return Err(seepic_core::i18n::tr("Could not read the current folder").to_string());
             };
             if container.kind().is_archive() {
-                return Err("不能在压缩包内粘贴文件".to_string());
+                return Err(seepic_core::i18n::tr("Cannot paste files into an archive").to_string());
             }
             return Ok(container.path().to_path_buf());
         }
 
         let folder = self.settings.photo_folder.trim();
         if folder.is_empty() {
-            return Err("请先在「设置 → 其他」指定图片文件夹".to_string());
+            return Err(seepic_core::i18n::tr("Choose a photo folder in Settings → Other first").to_string());
         }
         Ok(PathBuf::from(folder))
     }
@@ -6591,7 +6591,7 @@ impl ViewerApp {
             Command::RevealInFolder => self.reveal_in_folder(cx),
             Command::Rename => {
                 if self.in_archive() {
-                    self.push_toast("压缩包内的文件不能重命名", true, cx);
+                    self.push_toast(seepic_core::i18n::tr("Files inside an archive cannot be renamed"), true, cx);
                 } else if let Some(path) = self.current_path() {
                     let name = path
                         .file_name()
@@ -6603,7 +6603,7 @@ impl ViewerApp {
             }
             Command::DeleteFile => {
                 let Some(path) = self.current_path() else {
-                    self.push_toast("没有可删除的文件", true, cx);
+                    self.push_toast(seepic_core::i18n::tr("No file to delete"), true, cx);
                     return;
                 };
                 let name = path
@@ -6652,7 +6652,7 @@ impl ViewerApp {
                 }
             }
             // The window is sized to the image, in logical pixels, which is
-            // what "适应图像大小" means here.
+            // what "Fit Image Size" means here.
             Command::ResizeWindowToImage => {
                 if self.current.is_some() {
                     let image = self.image_size();
@@ -6732,9 +6732,9 @@ impl ViewerApp {
                 let _ = self.settings.save();
                 self.push_toast(
                     if on {
-                        "智能双页：使用单独的封面"
+                        seepic_core::i18n::tr("Two-page: separate cover")
                     } else {
-                        "智能双页：不使用单独的封面"
+                        seepic_core::i18n::tr("Two-page: shared cover")
                     },
                     false,
                     cx,
@@ -6977,7 +6977,7 @@ impl ViewerApp {
                 self.push_toast(
                     format!(
                         "图像边框：{}",
-                        if self.settings.show_border { "显示" } else { "隐藏" }
+                        if self.settings.show_border { seepic_core::i18n::tr("Display") } else { seepic_core::i18n::tr("Hide") }
                     ),
                     false,
                     cx,
@@ -7004,9 +7004,9 @@ impl ViewerApp {
                 self.zoom.zoom_locked = !self.zoom.zoom_locked;
                 self.push_toast(
                     if self.zoom.zoom_locked {
-                        "已固定缩放比例"
+                        seepic_core::i18n::tr("Zoom lock on")
                     } else {
-                        "已取消固定缩放比例"
+                        seepic_core::i18n::tr("Zoom lock off")
                     },
                     false,
                     cx,
@@ -7016,9 +7016,9 @@ impl ViewerApp {
                 self.zoom.scroll_locked = !self.zoom.scroll_locked;
                 self.push_toast(
                     if self.zoom.scroll_locked {
-                        "已固定滚动位置"
+                        seepic_core::i18n::tr("Scroll lock on")
                     } else {
-                        "已取消固定滚动位置"
+                        seepic_core::i18n::tr("Scroll lock off")
                     },
                     false,
                     cx,
@@ -7037,14 +7037,14 @@ impl ViewerApp {
                     cx.write_to_clipboard(ClipboardItem::new_string(
                         path.display().to_string(),
                     ));
-                    self.push_toast("已复制文件路径", false, cx);
+                    self.push_toast(seepic_core::i18n::tr("File path copied"), false, cx);
                 }
-                None => self.push_toast("没有可复制的路径", true, cx),
+                None => self.push_toast(seepic_core::i18n::tr("No path to copy"), true, cx),
             },
             Command::CopyExif => {
                 let text = self.exif_text();
                 cx.write_to_clipboard(ClipboardItem::new_string(text));
-                self.push_toast("已复制 EXIF 信息", false, cx);
+                self.push_toast(seepic_core::i18n::tr("EXIF info copied"), false, cx);
             }
             Command::CopyFile => self.copy_file_to_clipboard(false, cx),
             Command::CutFile => self.copy_file_to_clipboard(true, cx),
@@ -7151,9 +7151,9 @@ impl ViewerApp {
     /// user experiences anyway.
     fn pick_file(&mut self, cx: &mut Context<Self>) {
         let dialog = rfd::FileDialog::new()
-            .set_title("打开图片或压缩包")
+            .set_title(seepic_core::i18n::tr("Open an Image or Archive"))
             .add_filter(
-                "图片与压缩包",
+                seepic_core::i18n::tr("Images & Archives"),
                 &[
                     "jpg", "jpeg", "jpe", "jfif", "png", "gif", "webp", "bmp", "ico", "tif",
                     "tiff", "tga", "pnm", "dds", "hdr", "exr", "qoi", "zip", "cbz", "7z", "cb7",
@@ -7173,7 +7173,7 @@ impl ViewerApp {
 
     /// Native "open folder" dialog.
     fn pick_folder(&mut self, cx: &mut Context<Self>) {
-        let dialog = rfd::FileDialog::new().set_title("打开文件夹");
+        let dialog = rfd::FileDialog::new().set_title(seepic_core::i18n::tr("Open Folder"));
         Self::dialog_off_stack(
             cx,
             move || dialog.pick_folder(),
@@ -7188,7 +7188,7 @@ impl ViewerApp {
     /// Write the whole configuration to a file the user picks.
     pub fn export_settings(&mut self, cx: &mut Context<Self>) {
         let dialog = rfd::FileDialog::new()
-            .set_title("导出设置")
+            .set_title(seepic_core::i18n::tr("Export Settings"))
             .set_file_name("seepic-settings.json")
             .add_filter("JSON", &["json"]);
         Self::dialog_off_stack(
@@ -7211,7 +7211,7 @@ impl ViewerApp {
     /// Replace the configuration from a file the user picks, then apply it.
     pub fn import_settings(&mut self, cx: &mut Context<Self>) {
         let dialog = rfd::FileDialog::new()
-            .set_title("导入设置")
+            .set_title(seepic_core::i18n::tr("Import Settings"))
             .add_filter("JSON", &["json"]);
         Self::dialog_off_stack(
             cx,
@@ -7246,8 +7246,8 @@ impl ViewerApp {
     /// Native picker for the picture drawn behind the image.
     pub fn pick_background_image(&mut self, cx: &mut Context<Self>) {
         let dialog = rfd::FileDialog::new()
-            .set_title("选择背景图片")
-            .add_filter("图片", &["jpg", "jpeg", "png", "gif", "webp", "bmp", "tif", "tiff"]);
+            .set_title(seepic_core::i18n::tr("Choose Background Image"))
+            .add_filter(seepic_core::i18n::tr("Image"), &["jpg", "jpeg", "png", "gif", "webp", "bmp", "tif", "tiff"]);
         Self::dialog_off_stack(
             cx,
             move || dialog.pick_file(),
@@ -7463,11 +7463,11 @@ impl ViewerApp {
 
     fn reveal_in_folder(&mut self, cx: &mut Context<Self>) {
         let Some(path) = self.current_path() else {
-            self.push_toast("没有可显示的文件", true, cx);
+            self.push_toast(seepic_core::i18n::tr("No file to display"), true, cx);
             return;
         };
         if !crate::shell_open::reveal(&path) {
-            self.push_toast("无法打开文件夹", true, cx);
+            self.push_toast(seepic_core::i18n::tr("Could not open the folder"), true, cx);
         }
     }
 
@@ -7484,7 +7484,7 @@ impl ViewerApp {
 
     pub fn start_slideshow(&mut self, cx: &mut Context<Self>) {
         if !self.has_images() {
-            self.push_toast(s::NO_IMAGES_IN_ARCHIVE, true, cx);
+            self.push_toast(s::NO_IMAGES_IN_ARCHIVE(), true, cx);
             return;
         }
         self.slideshow.start();
@@ -7710,7 +7710,7 @@ impl ViewerApp {
             cx.stop_propagation();
             if keystroke.key == "escape" {
                 self.recording_key = None;
-                self.push_toast("已取消录制", false, cx);
+                self.push_toast(seepic_core::i18n::tr("Recording cancelled"), false, cx);
             } else {
                 self.bind_recorded_key(command, &binding, cx);
             }
@@ -8197,7 +8197,7 @@ fn convert_one(
     let (bytes, source_path, disk_path) = {
         let mut guard = container
             .lock()
-            .map_err(|_| ConvertError::Read("容器状态已损坏".to_string()))?;
+            .map_err(|_| ConvertError::Read(seepic_core::i18n::tr("Container state is corrupted").to_string()))?;
         let bytes = guard
             .read(source)
             .map_err(|error| ConvertError::Read(error.to_string()))?;
@@ -8213,7 +8213,7 @@ fn convert_one(
                 let parent = archive.parent().map(Path::to_path_buf).unwrap_or_default();
                 (bytes, parent.join(name), None)
             }
-            None => return Err(ConvertError::Read("找不到该条目".to_string())),
+            None => return Err(ConvertError::Read(seepic_core::i18n::tr("Entry not found").to_string())),
         }
     };
 

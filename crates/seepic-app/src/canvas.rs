@@ -418,7 +418,7 @@ fn loading_state(view: &ViewerApp, cx: &mut Context<ViewerApp>) -> impl IntoElem
     let text = if view.probing {
         "正在读取图像信息…".to_string()
     } else {
-        s::LOADING.to_string()
+        s::LOADING().to_string()
     };
     v_flex()
         .items_center()

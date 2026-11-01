@@ -72,7 +72,7 @@ pub fn render(view: &ViewerApp, prompt: &PasswordPrompt, cx: &mut Context<Viewer
                                     div()
                                         .text_sm()
                                         .font_weight(FontWeight::SEMIBOLD)
-                                        .child(s::PASSWORD_TITLE),
+                                        .child(s::PASSWORD_TITLE()),
                                 ),
                         )
                         .child(
@@ -98,7 +98,7 @@ pub fn render(view: &ViewerApp, prompt: &PasswordPrompt, cx: &mut Context<Viewer
                                 .text_sm()
                                 .text_color(theme.muted_foreground)
                                 .child(if prompt.archive.is_empty() {
-                                    s::PASSWORD_HINT.to_string()
+                                    s::PASSWORD_HINT().to_string()
                                 } else {
                                     format!("「{}」已加密，请输入密码。", prompt.archive)
                                 }),
@@ -122,7 +122,7 @@ pub fn render(view: &ViewerApp, prompt: &PasswordPrompt, cx: &mut Context<Viewer
                                     this.child(
                                         div()
                                             .text_color(theme.muted_foreground)
-                                            .child("输入密码后按 Enter"),
+                                            .child(seepic_core::i18n::tr("Type the password and press Enter")),
                                     )
                                 })
                                 .when(!prompt.input.is_empty(), |this| this.child(masked)),
@@ -132,7 +132,7 @@ pub fn render(view: &ViewerApp, prompt: &PasswordPrompt, cx: &mut Context<Viewer
                                 div()
                                     .text_xs()
                                     .text_color(theme.danger)
-                                    .child(s::PASSWORD_WRONG),
+                                    .child(s::PASSWORD_WRONG()),
                             )
                         }),
                 )
@@ -156,7 +156,7 @@ pub fn render(view: &ViewerApp, prompt: &PasswordPrompt, cx: &mut Context<Viewer
                                 .border_1()
                                 .border_color(theme.border)
                                 .hover(|this| this.bg(theme.button_hover))
-                                .child(s::CANCEL)
+                                .child(s::CANCEL())
                                 .on_click(cx.listener(|this, _: &ClickEvent, _window, cx| {
                                     this.cancel_password(cx);
                                 })),
@@ -172,7 +172,7 @@ pub fn render(view: &ViewerApp, prompt: &PasswordPrompt, cx: &mut Context<Viewer
                                 .bg(theme.primary)
                                 .text_color(theme.primary_foreground)
                                 .hover(|this| this.opacity(0.9))
-                                .child(s::CONFIRM)
+                                .child(s::CONFIRM())
                                 .on_click(cx.listener(|this, _: &ClickEvent, _window, cx| {
                                     this.submit_password(cx);
                                 })),

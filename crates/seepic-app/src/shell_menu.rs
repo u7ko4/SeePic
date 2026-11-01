@@ -6,6 +6,7 @@
 //! the menu off unrelated files. On Windows 11 these classic verbs live under
 //! "Show more options".
 
+use seepic_core::i18n::Language;
 use seepic_core::image_formats::{ARCHIVE_EXTENSIONS, IMAGE_EXTENSIONS};
 use seepic_core::settings::Settings;
 use windows_sys::Win32::System::Registry::HKEY_CURRENT_USER;
@@ -25,6 +26,9 @@ pub struct Config {
     pub on_folder: bool,
     pub on_background: bool,
     pub icon: bool,
+    /// The menu labels follow the interface language, so a language change has
+    /// to rewrite the verbs.
+    pub language: Language,
 }
 
 impl Config {
@@ -37,6 +41,7 @@ impl Config {
             on_folder: settings.shell_menu_on_folder,
             on_background: settings.shell_menu_on_background,
             icon: settings.shell_preview_icon,
+            language: settings.effective_language(),
         }
     }
 }
@@ -67,7 +72,7 @@ pub fn apply(config: Config) -> Result<(), String> {
                 add(
                     &shell,
                     VIEW_VERB,
-                    "用 SeePic 浏览",
+                    seepic_core::i18n::tr("Browse with SeePic"),
                     &view,
                     false,
                     config.icon.then_some(icon.as_str()),
@@ -77,7 +82,7 @@ pub fn apply(config: Config) -> Result<(), String> {
                 add(
                     &shell,
                     CONVERT_VERB,
-                    "用 SeePic 转换",
+                    seepic_core::i18n::tr("Convert with SeePic"),
                     &convert,
                     config.convert_shift,
                     config.icon.then_some(icon.as_str()),
@@ -91,7 +96,7 @@ pub fn apply(config: Config) -> Result<(), String> {
                 add(
                     &shell,
                     VIEW_VERB,
-                    "用 SeePic 浏览",
+                    seepic_core::i18n::tr("Browse with SeePic"),
                     &view,
                     false,
                     config.icon.then_some(icon.as_str()),
@@ -101,7 +106,7 @@ pub fn apply(config: Config) -> Result<(), String> {
                 add(
                     &shell,
                     CONVERT_VERB,
-                    "用 SeePic 转换",
+                    seepic_core::i18n::tr("Convert with SeePic"),
                     &convert,
                     config.convert_shift,
                     config.icon.then_some(icon.as_str()),
@@ -115,7 +120,7 @@ pub fn apply(config: Config) -> Result<(), String> {
                 add(
                     &shell,
                     VIEW_VERB,
-                    "用 SeePic 浏览",
+                    seepic_core::i18n::tr("Browse with SeePic"),
                     &view_background,
                     false,
                     config.icon.then_some(icon.as_str()),
@@ -125,7 +130,7 @@ pub fn apply(config: Config) -> Result<(), String> {
                 add(
                     &shell,
                     CONVERT_VERB,
-                    "用 SeePic 转换",
+                    seepic_core::i18n::tr("Convert with SeePic"),
                     &convert_background,
                     config.convert_shift,
                     config.icon.then_some(icon.as_str()),
@@ -222,13 +227,14 @@ mod tests {
             on_folder: true,
             on_background: true,
             icon: true,
+            language: seepic_core::i18n::Language::Chinese,
         };
         apply(on).expect("register the menu");
 
         let file = format!("{CLASSES}\\SystemFileAssociations\\.jpg\\shell\\{VIEW_VERB}");
         assert_eq!(
             query(HKEY_CURRENT_USER, &file, None).as_deref(),
-            Some("用 SeePic 浏览")
+            Some(seepic_core::i18n::tr("Browse with SeePic"))
         );
         assert!(query(HKEY_CURRENT_USER, &file, Some("Icon")).is_some());
         assert!(query(HKEY_CURRENT_USER, &format!("{file}\\command"), None).is_some());

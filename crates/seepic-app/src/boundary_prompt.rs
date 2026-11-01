@@ -18,7 +18,7 @@ pub struct BoundaryPrompt {
     pub forward: bool,
     /// The container being browsed, shown so the target reads in context.
     pub container: String,
-    /// The image the "go to the other end" choice would land on.
+    /// The image the ")go to the other end" choice would land on.
     pub wrap_target: String,
     /// The neighbouring container, when there is one to move to.
     pub sibling: Option<String>,
@@ -28,9 +28,9 @@ impl BoundaryPrompt {
     /// The question, phrased for the direction the user was going.
     pub fn title(&self) -> &'static str {
         if self.forward {
-            "已到最后一张"
+            seepic_core::i18n::tr("At the last image")
         } else {
-            "已到第一张"
+            seepic_core::i18n::tr("At the first image")
         }
     }
 }
@@ -38,9 +38,9 @@ impl BoundaryPrompt {
 pub fn render(prompt: &BoundaryPrompt, cx: &mut Context<ViewerApp>) -> AnyElement {
     let theme = cx.theme().clone();
     let wrap_label = if prompt.forward {
-        "转到第一个文件"
+        seepic_core::i18n::tr("Wrap to the first image")
     } else {
-        "转到最后一个文件"
+        seepic_core::i18n::tr("Wrap to the last image")
     };
 
     let mut choices = v_flex().w_full().gap_1().child(choice(
@@ -54,7 +54,7 @@ pub fn render(prompt: &BoundaryPrompt, cx: &mut Context<ViewerApp>) -> AnyElemen
     if let Some(sibling) = &prompt.sibling {
         choices = choices.child(choice(
             "boundary-sibling",
-            "转到下一个文件夹或文件",
+            seepic_core::i18n::tr("Next Folder / Archive"),
             sibling,
             Action::Apply(BoundaryAction::NextContainer),
             cx,
@@ -64,8 +64,8 @@ pub fn render(prompt: &BoundaryPrompt, cx: &mut Context<ViewerApp>) -> AnyElemen
     choices = choices
         .child(choice(
             "boundary-nothing",
-            "无操作",
-            "留在当前图像",
+            seepic_core::i18n::tr("Do Nothing"),
+            seepic_core::i18n::tr("Stay on this image"),
             Action::Apply(BoundaryAction::DoNothing),
             cx,
         ))
@@ -73,7 +73,7 @@ pub fn render(prompt: &BoundaryPrompt, cx: &mut Context<ViewerApp>) -> AnyElemen
         // Answered once and remembered, so the user can stop being asked.
         .child(choice(
             "boundary-always-wrap",
-            "以后都转到另一端（不再询问）",
+            seepic_core::i18n::tr("Always wrap (stop asking)"),
             &prompt.wrap_target,
             Action::Remember(BoundaryAction::Wrap),
             cx,
@@ -81,7 +81,7 @@ pub fn render(prompt: &BoundaryPrompt, cx: &mut Context<ViewerApp>) -> AnyElemen
     if prompt.sibling.is_some() {
         choices = choices.child(choice(
             "boundary-always-sibling",
-            "以后都转到下一个文件夹或文件（不再询问）",
+            seepic_core::i18n::tr("Always go to the next folder / archive (stop asking)"),
             prompt.sibling.as_deref().unwrap_or_default(),
             Action::Remember(BoundaryAction::NextContainer),
             cx,

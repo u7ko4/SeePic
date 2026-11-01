@@ -46,7 +46,7 @@ impl DialogState {
     pub fn about(version: &str) -> Self {
         Self {
             kind: DialogKind::About,
-            title: "关于".to_string(),
+            title: seepic_core::i18n::tr("About").to_string(),
             message: format!(
                 "SeePic {version}\n\
                  一个用 Rust + GPUI 编写的桌面图片查看器与漫画阅读器。\n\
@@ -67,7 +67,7 @@ impl DialogState {
     pub fn delete_file(path: PathBuf, name: &str) -> Self {
         Self {
             kind: DialogKind::DeleteFile { path },
-            title: "删除文件".to_string(),
+            title: seepic_core::i18n::tr("Delete File").to_string(),
             message: format!("确定要把「{name}」移到回收站吗？"),
             input: String::new(),
             error: None,
@@ -77,7 +77,7 @@ impl DialogState {
     pub fn delete_archive(path: PathBuf, name: &str) -> Self {
         Self {
             kind: DialogKind::DeleteArchive { path },
-            title: "删除压缩包".to_string(),
+            title: seepic_core::i18n::tr("Delete Archive").to_string(),
             message: format!("当前图像是压缩包的一部分。要删除整个「{name}」吗？"),
             input: String::new(),
             error: None,
@@ -87,8 +87,8 @@ impl DialogState {
     pub fn rename(path: PathBuf, current: &str) -> Self {
         Self {
             kind: DialogKind::Rename { path },
-            title: "重命名".to_string(),
-            message: "输入新的文件名。".to_string(),
+            title: seepic_core::i18n::tr("Rename").to_string(),
+            message: seepic_core::i18n::tr("Enter a new file name.").to_string(),
             input: current.to_string(),
             error: None,
         }
@@ -224,7 +224,7 @@ pub fn render(view: &ViewerApp, dialog: &DialogState, cx: &mut Context<ViewerApp
                                 .border_1()
                                 .border_color(theme.border)
                                 .hover(|this| this.bg(theme.button_hover))
-                                .child(s::CANCEL)
+                                .child(s::CANCEL())
                                 .on_click(cx.listener(|this, _: &ClickEvent, _window, cx| {
                                     this.cancel_dialog(cx);
                                 })),
@@ -246,9 +246,9 @@ pub fn render(view: &ViewerApp, dialog: &DialogState, cx: &mut Context<ViewerApp
                                 })
                                 .hover(|this| this.opacity(0.9))
                                 .child(if dialog.is_about() {
-                                    s::CLOSE
+                                    s::CLOSE()
                                 } else {
-                                    s::CONFIRM
+                                    s::CONFIRM()
                                 })
                                 .on_click(cx.listener(|this, _: &ClickEvent, _window, cx| {
                                     this.confirm_dialog(cx);

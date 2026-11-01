@@ -33,15 +33,15 @@ impl SortKey {
     ];
 
     pub fn label(self) -> &'static str {
-        match self {
-            SortKey::Name => "名称",
-            SortKey::DateModified => "修改日期",
-            SortKey::DateCreated => "创建日期",
-            SortKey::Size => "大小",
-            SortKey::Type => "类型",
-            SortKey::DateTaken => "拍摄日期",
-            SortKey::Logical => "逻辑顺序（数字按数值）",
-        }
+        crate::i18n::tr(match self {
+            SortKey::Name => "Name",
+            SortKey::DateModified => "Modified",
+            SortKey::DateCreated => "Created",
+            SortKey::Size => "Size",
+            SortKey::Type => "Type",
+            SortKey::DateTaken => "Taken",
+            SortKey::Logical => "Natural Order",
+        })
     }
 }
 
@@ -94,12 +94,12 @@ impl BoundaryAction {
     ];
 
     pub fn label(self) -> &'static str {
-        match self {
-            BoundaryAction::DoNothing => "无操作",
-            BoundaryAction::Ask => "询问",
-            BoundaryAction::Wrap => "转到首个文件",
-            BoundaryAction::NextContainer => "转到下一个文件夹或文件",
-        }
+        crate::i18n::tr(match self {
+            BoundaryAction::DoNothing => "Do Nothing",
+            BoundaryAction::Ask => "Ask",
+            BoundaryAction::Wrap => "Wrap to First",
+            BoundaryAction::NextContainer => "Next Folder / Archive",
+        })
     }
 }
 

@@ -13,6 +13,7 @@ pub mod effects;
 pub mod fileops;
 pub mod filters;
 pub mod geom;
+pub mod i18n;
 pub mod image_formats;
 pub mod library;
 pub mod metacache;

@@ -104,7 +104,7 @@ pub fn render(view: &ViewerApp, dialog: &ConvertDialog, cx: &mut Context<ViewerA
         .px_4()
         .py_3()
         .gap_1()
-        .child(section("缩放模式", cx))
+        .child(section(seepic_core::i18n::tr("Resize Mode"), cx))
         .child(radio_list(
             ResizeMode::MODES
                 .iter()
@@ -122,7 +122,7 @@ pub fn render(view: &ViewerApp, dialog: &ConvertDialog, cx: &mut Context<ViewerA
 
     if uses_value(options.resize) {
         body = body.child(stepper(
-            "数值",
+            seepic_core::i18n::tr("Value"),
             value_of(options),
             1,
             20_000,
@@ -134,7 +134,7 @@ pub fn render(view: &ViewerApp, dialog: &ConvertDialog, cx: &mut Context<ViewerA
     }
     if let ResizeMode::FitBox { height, .. } = options.resize {
         body = body.child(stepper(
-            "框高",
+            seepic_core::i18n::tr("Box Height"),
             height as i32,
             1,
             20_000,
@@ -146,7 +146,7 @@ pub fn render(view: &ViewerApp, dialog: &ConvertDialog, cx: &mut Context<ViewerA
     }
 
     body = body
-        .child(section("输出格式", cx))
+        .child(section(seepic_core::i18n::tr("Output Format"), cx))
         .child(radio_list(
             OutputFormat::ALL
                 .iter()
@@ -159,7 +159,7 @@ pub fn render(view: &ViewerApp, dialog: &ConvertDialog, cx: &mut Context<ViewerA
 
     if options.format.uses_quality() {
         body = body.child(stepper(
-            "质量",
+            seepic_core::i18n::tr("Quality"),
             options.quality as i32,
             1,
             100,
@@ -171,13 +171,13 @@ pub fn render(view: &ViewerApp, dialog: &ConvertDialog, cx: &mut Context<ViewerA
     }
 
     body = body
-        .child(section("旋转", cx))
+        .child(section(seepic_core::i18n::tr("Rotation"), cx))
         .child(radio_list(
             [
-                (Rotation::None, "不旋转"),
-                (Rotation::Cw90, "顺时针 90°"),
+                (Rotation::None, seepic_core::i18n::tr("None")),
+                (Rotation::Cw90, seepic_core::i18n::tr("90° CW")),
                 (Rotation::Cw180, "180°"),
-                (Rotation::Cw270, "逆时针 90°"),
+                (Rotation::Cw270, seepic_core::i18n::tr("90° CCW")),
             ]
             .iter()
             .map(|(rotation, label)| (*label, *rotation == options.rotation))
@@ -186,8 +186,8 @@ pub fn render(view: &ViewerApp, dialog: &ConvertDialog, cx: &mut Context<ViewerA
             running,
             cx,
         ))
-        .child(section("输出位置", cx))
-        .child(toggle_row("与源文件同一目录", options.same_folder, Field::SameFolder, running, cx))
+        .child(section(seepic_core::i18n::tr("Output Location"), cx))
+        .child(toggle_row(seepic_core::i18n::tr("Same folder as source"), options.same_folder, Field::SameFolder, running, cx))
         .child(
             h_flex()
                 .w_full()
@@ -203,23 +203,23 @@ pub fn render(view: &ViewerApp, dialog: &ConvertDialog, cx: &mut Context<ViewerA
                         .truncate()
                         .child(match &options.output_dir {
                             Some(dir) if !options.same_folder => dir.display().to_string(),
-                            _ => "（同目录）".to_string(),
+                            _ => seepic_core::i18n::tr("(same folder)").to_string(),
                         }),
                 )
-                .child(button("选择目录…", running, cx, |this, cx| {
+                .child(button(seepic_core::i18n::tr("Choose Folder…"), running, cx, |this, cx| {
                     this.pick_convert_folder(cx)
                 })),
         )
-        .child(section("文件名", cx))
-        .child(info_row("前缀", if options.prefix.is_empty() { "（无）".to_string() } else { options.prefix.clone() }, cx))
+        .child(section(seepic_core::i18n::tr("File Name"), cx))
+        .child(info_row(seepic_core::i18n::tr("Prefix"), if options.prefix.is_empty() { seepic_core::i18n::tr("(none)").to_string() } else { options.prefix.clone() }, cx))
         .child(
             div()
                 .px_2()
                 .text_xs()
                 .text_color(theme.muted_foreground)
-                .child("打开对话框后可直接输入前缀；退格删除。"),
+                .child(seepic_core::i18n::tr("Type the prefix directly; Backspace deletes.")),
         )
-        .child(section("重名时", cx))
+        .child(section(seepic_core::i18n::tr("On Conflict"), cx))
         .child(radio_list(
             Overwrite::ALL
                 .iter()
@@ -230,21 +230,21 @@ pub fn render(view: &ViewerApp, dialog: &ConvertDialog, cx: &mut Context<ViewerA
             cx,
         ))
         .child(toggle_row(
-            "转换后删除源文件",
+            seepic_core::i18n::tr("Delete source after converting"),
             options.delete_source,
             Field::DeleteSource,
             running,
             cx,
         ))
-        .child(section("输出预览", cx))
+        .child(section(seepic_core::i18n::tr("Output Preview"), cx))
         .child(info_row(
-            "当前图像将写入",
-            target.unwrap_or_else(|| "（无法确定）".to_string()),
+            seepic_core::i18n::tr("Current image will be written to"),
+            target.unwrap_or_else(|| seepic_core::i18n::tr("(unknown)").to_string()),
             cx,
         ));
 
     if let Some(job) = &dialog.job {
-        body = body.child(section("进度", cx)).child(
+        body = body.child(section(seepic_core::i18n::tr("Progress"), cx)).child(
             v_flex()
                 .w_full()
                 .gap_1()
@@ -283,7 +283,7 @@ pub fn render(view: &ViewerApp, dialog: &ConvertDialog, cx: &mut Context<ViewerA
             .justify_end()
             .border_t_1()
             .border_color(theme.border)
-            .child(button("取消转换", false, cx, |this, cx| {
+            .child(button(seepic_core::i18n::tr("Cancel Conversion"), false, cx, |this, cx| {
                 this.cancel_conversion(cx)
             }))
     } else {
@@ -295,8 +295,8 @@ pub fn render(view: &ViewerApp, dialog: &ConvertDialog, cx: &mut Context<ViewerA
             .justify_end()
             .border_t_1()
             .border_color(theme.border)
-            .child(button("关闭", false, cx, |this, cx| this.close_converter(cx)))
-            .child(button("开始转换", false, cx, |this, cx| {
+            .child(button(seepic_core::i18n::tr("Close"), false, cx, |this, cx| this.close_converter(cx)))
+            .child(button(seepic_core::i18n::tr("Start Conversion"), false, cx, |this, cx| {
                 this.start_conversion(cx)
             }))
     };
@@ -346,7 +346,7 @@ pub fn render(view: &ViewerApp, dialog: &ConvertDialog, cx: &mut Context<ViewerA
                             div()
                                 .text_sm()
                                 .font_weight(FontWeight::SEMIBOLD)
-                                .child("图像转换器"),
+                                .child(seepic_core::i18n::tr("Image Converter")),
                         )
                         .child(
                             div()

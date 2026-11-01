@@ -132,7 +132,7 @@ pub fn modal(
                 )
                 .child(
                     div()
-                        .id(gpui::SharedString::from(format!("{key}-panel-body")))
+                        .id(gpui::SharedString::from(format!("{key}-panel-bodyseepic_core::i18n::tr(")))
                         .w_full()
                         .flex_1()
                         .min_h_0()
@@ -290,7 +290,7 @@ fn sort_body(view: &ViewerApp, cx: &mut Context<ViewerApp>) -> impl IntoElement 
     let order = view.sort_order;
 
     v_flex()
-        .child(section("文件排序方式", cx))
+        .child(section(")文件排序方式", cx))
         .children(seepic_core::SortKey::ALL.into_iter().enumerate().map(
             |(index, key)| {
                 radio_row(
@@ -303,17 +303,17 @@ fn sort_body(view: &ViewerApp, cx: &mut Context<ViewerApp>) -> impl IntoElement 
                 .into_any_element()
             },
         ))
-        .child(section("排序方向", cx))
+        .child(section(seepic_core::i18n::tr("Sort Direction"), cx))
         .child(radio_row(
             ("sort-dir", 0),
-            "升序",
+            seepic_core::i18n::tr("Ascending"),
             !order.descending,
             Action::SortDirection(false),
             cx,
         ))
         .child(radio_row(
             ("sort-dir", 1),
-            "降序",
+            seepic_core::i18n::tr("Descending"),
             order.descending,
             Action::SortDirection(true),
             cx,
@@ -326,10 +326,10 @@ fn bookmark_body(view: &ViewerApp, cx: &mut Context<ViewerApp>) -> impl IntoElem
     let theme = cx.theme().clone();
 
     let mut body = v_flex()
-        .child(section("收藏夹", cx))
+        .child(section(seepic_core::i18n::tr("Bookmarks"), cx))
         .child(command_row(
             "bm-add",
-            "＋ 添加到收藏夹",
+            seepic_core::i18n::tr("+ Add Bookmark"),
             Some("B".to_string()),
             Command::BookmarkAdd,
             view.has_images(),
@@ -337,7 +337,7 @@ fn bookmark_body(view: &ViewerApp, cx: &mut Context<ViewerApp>) -> impl IntoElem
         ))
         .child(command_row(
             "bm-recent",
-            "打开最近添加的收藏",
+            seepic_core::i18n::tr("Open Recent Bookmark"),
             Some("F3".to_string()),
             Command::BookmarkLoadRecent,
             !view.bookmarks.is_empty(),
@@ -363,7 +363,7 @@ fn bookmark_body(view: &ViewerApp, cx: &mut Context<ViewerApp>) -> impl IntoElem
                         .when(view.bookmarks.is_empty(), |this| {
                             this.text_color(theme.muted_foreground)
                         })
-                        .child("清空收藏夹"),
+                        .child(seepic_core::i18n::tr("Clear Bookmarks")),
                 )
                 .when(!view.bookmarks.is_empty(), |this| {
                     this.on_click(cx.listener(|this, _: &ClickEvent, window, cx| {
@@ -380,7 +380,7 @@ fn bookmark_body(view: &ViewerApp, cx: &mut Context<ViewerApp>) -> impl IntoElem
                 .text_sm()
                 .text_center()
                 .text_color(theme.muted_foreground)
-                .child("收藏夹为空"),
+                .child(seepic_core::i18n::tr("Bookmarks are empty")),
         );
         return body;
     }
@@ -544,7 +544,7 @@ pub fn navigator(
                             div()
                                 .text_sm()
                                 .font_weight(FontWeight::SEMIBOLD)
-                                .child("选择图像"),
+                                .child(seepic_core::i18n::tr("Select Image")),
                         )
                         .child(
                             div()
@@ -587,7 +587,7 @@ pub fn navigator(
                                 .cursor_pointer()
                                 .bg(theme.primary)
                                 .text_color(theme.primary_foreground)
-                                .child("打开")
+                                .child(seepic_core::i18n::tr("Open"))
                                 .on_click(cx.listener(|this, _: &ClickEvent, _window, cx| {
                                     let index = this.navigator_selection;
                                     this.show_navigator = false;
@@ -663,7 +663,7 @@ pub fn file_search(view: &ViewerApp, cx: &mut Context<ViewerApp>) -> AnyElement 
                 .py_4()
                 .text_sm()
                 .text_color(theme.muted_foreground)
-                .child("没有匹配的文件"),
+                .child(seepic_core::i18n::tr("No matching files")),
         );
     }
 
@@ -679,7 +679,7 @@ pub fn file_search(view: &ViewerApp, cx: &mut Context<ViewerApp>) -> AnyElement 
                 .w(px(column))
                 .flex_shrink_0()
                 .text_right()
-                .child("序号"),
+                .child(seepic_core::i18n::tr("Index")),
         )
         // The divider is the resize handle: a wide hit area around a hairline,
         // with the familiar east-west cursor.
@@ -703,7 +703,7 @@ pub fn file_search(view: &ViewerApp, cx: &mut Context<ViewerApp>) -> AnyElement 
                     }),
                 ),
         )
-        .child(div().flex_1().min_w_0().pl_1().child("文件名"));
+        .child(div().flex_1().min_w_0().pl_1().child(seepic_core::i18n::tr("File Name")));
 
     let body = v_flex()
         .w_full()
@@ -727,7 +727,7 @@ pub fn file_search(view: &ViewerApp, cx: &mut Context<ViewerApp>) -> AnyElement 
                             this.text_color(theme.muted_foreground)
                         })
                         .child(if search.filter.is_empty() {
-                            "输入文件名以搜索…".to_string()
+                            seepic_core::i18n::tr("Type a file name to search…").to_string()
                         } else {
                             search.filter.clone()
                         }),
@@ -751,7 +751,7 @@ pub fn file_search(view: &ViewerApp, cx: &mut Context<ViewerApp>) -> AnyElement 
                 .px_2()
                 .text_xs()
                 .text_color(theme.muted_foreground)
-                .child("↑↓ 选择，回车打开，Esc 关闭"),
+                .child(seepic_core::i18n::tr("↑↓ to choose, Enter to open, Esc to close")),
         )
         .on_mouse_move(cx.listener(
             |this, event: &MouseMoveEvent, _window, cx| {
@@ -773,7 +773,7 @@ pub fn file_search(view: &ViewerApp, cx: &mut Context<ViewerApp>) -> AnyElement 
         )
         .into_any_element();
 
-    modal("search", "搜索文件", 560., body, ViewerApp::close_file_search, cx)
+    modal("search", seepic_core::i18n::tr("Search Files"), 560., body, ViewerApp::close_file_search, cx)
 }
 
 /// The command list, used to bind a mouse button to any command in the table.
@@ -786,7 +786,7 @@ pub fn command_picker(view: &ViewerApp, cx: &mut Context<ViewerApp>) -> AnyEleme
     let title = match picker.slot {
         Some(slot) => format!("为「{}」选择指令", slot.label()),
         // Opened from 更多 → 快捷键一览, this is the reference list.
-        None => "指令与快捷键".to_string(),
+        None => seepic_core::i18n::tr("Commands & Shortcuts").to_string(),
     };
 
     let mut list = v_flex().w_full();
@@ -891,7 +891,7 @@ pub fn command_picker(view: &ViewerApp, cx: &mut Context<ViewerApp>) -> AnyEleme
                             div()
                                 .text_xs()
                                 .text_color(theme.muted_foreground)
-                                .child("筛选"),
+                                .child(seepic_core::i18n::tr("Filter")),
                         )
                         .child(
                             div()
@@ -902,7 +902,7 @@ pub fn command_picker(view: &ViewerApp, cx: &mut Context<ViewerApp>) -> AnyEleme
                                 .bg(theme.input)
                                 .text_sm()
                                 .child(if picker.filter.is_empty() {
-                                    "输入以筛选指令…".to_string()
+                                    seepic_core::i18n::tr("Type to filter commands…").to_string()
                                 } else {
                                     picker.filter.clone()
                                 }),

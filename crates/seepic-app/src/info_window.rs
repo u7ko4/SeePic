@@ -200,7 +200,7 @@ impl Render for InfoWindow {
                                 .flex_shrink_0()
                                 .text_sm()
                                 .font_weight(FontWeight::SEMIBOLD)
-                                .child("文件/EXIF 信息"),
+                                .child(seepic_core::i18n::tr("File / EXIF Info")),
                         )
                         .child(
                             div()
@@ -221,21 +221,21 @@ impl Render for InfoWindow {
                     .px_5()
                     .py_3()
                     .gap_1()
-                    .child(section("文件", &theme))
-                    .child(row("名称", info.name.clone(), &theme))
-                    .child(row("位置", info.location.clone(), &theme))
-                    .child(row("类型", info.format.clone(), &theme))
-                    .child(row("大小", human_size(info.byte_size), &theme))
+                    .child(section(seepic_core::i18n::tr("File"), &theme))
+                    .child(row(seepic_core::i18n::tr("Name"), info.name.clone(), &theme))
+                    .child(row(seepic_core::i18n::tr("Location"), info.location.clone(), &theme))
+                    .child(row(seepic_core::i18n::tr("Type"), info.format.clone(), &theme))
+                    .child(row(seepic_core::i18n::tr("Size"), human_size(info.byte_size), &theme))
                     .child(row(
-                        "尺寸",
+                        seepic_core::i18n::tr("Dimensions"),
                         format!("{} × {}", info.width, info.height),
                         &theme,
                     ))
                     .when(info.animated, |this| {
-                        this.child(row("动画", "是".to_string(), &theme))
+                        this.child(row(seepic_core::i18n::tr("Animation"), seepic_core::i18n::tr("Yes").to_string(), &theme))
                     })
                     .when_some(info.decoded_orientation, |this, value| {
-                        this.child(row(s::INFO_ORIENTATION, format!("EXIF {value}"), &theme))
+                        this.child(row(s::INFO_ORIENTATION(), format!("EXIF {value}"), &theme))
                     })
                     .child(section("EXIF", &theme))
                     .when(has_exif, |this| {
@@ -287,7 +287,7 @@ impl Render for InfoWindow {
                                 .py_1()
                                 .text_xs()
                                 .text_color(theme.muted_foreground)
-                                .child(s::INFO_NO_EXIF),
+                                .child(s::INFO_NO_EXIF()),
                         )
                     }),
             )
@@ -338,14 +338,14 @@ fn exif_markdown(info: &ImageInfo) -> String {
     let mut short = Vec::new();
     let mut long = Vec::new();
     let summary = [
-        (s::INFO_CAMERA, exif.camera.as_deref()),
-        (s::INFO_LENS, exif.lens.as_deref()),
-        (s::INFO_EXPOSURE, exif.exposure.as_deref()),
-        (s::INFO_APERTURE, exif.aperture.as_deref()),
-        (s::INFO_ISO, exif.iso.as_deref()),
-        (s::INFO_FOCAL, exif.focal.as_deref()),
-        (s::INFO_TAKEN, exif.taken.as_deref()),
-        ("软件", exif.software.as_deref()),
+        (s::INFO_CAMERA(), exif.camera.as_deref()),
+        (s::INFO_LENS(), exif.lens.as_deref()),
+        (s::INFO_EXPOSURE(), exif.exposure.as_deref()),
+        (s::INFO_APERTURE(), exif.aperture.as_deref()),
+        (s::INFO_ISO(), exif.iso.as_deref()),
+        (s::INFO_FOCAL(), exif.focal.as_deref()),
+        (s::INFO_TAKEN(), exif.taken.as_deref()),
+        (seepic_core::i18n::tr("Software"), exif.software.as_deref()),
     ];
     for (label, value) in summary {
         if let Some(value) = value {
@@ -358,7 +358,8 @@ fn exif_markdown(info: &ImageInfo) -> String {
 
     let mut out = String::new();
     if !short.is_empty() {
-        out.push_str("| 字段 | 值 |\n| --- | --- |\n");
+        out.push_str(seepic_core::i18n::tr("| Field | Value |"));
+        out.push_str("\n| --- | --- |\n");
         for (key, value) in &short {
             out.push_str("| ");
             out.push_str(&escape_cell(key));
@@ -369,20 +370,23 @@ fn exif_markdown(info: &ImageInfo) -> String {
     }
 
     for (key, value) in &long {
-        if key == "用户注释" {
+        if key == "User Comment" {
             let (prompt, negative, params) = split_comment(value);
             if !prompt.is_empty() {
-                out.push_str("### 提示词\n\n```\n");
+                out.push_str(seepic_core::i18n::tr("### Prompt"));
+                out.push_str("\n\n```\n");
                 out.push_str(&prompt);
                 out.push_str("\n```\n\n");
             }
             if !negative.is_empty() {
-                out.push_str("### 负面提示词\n\n```\n");
+                out.push_str(seepic_core::i18n::tr("### Negative Prompt"));
+                out.push_str("\n\n```\n");
                 out.push_str(&negative);
                 out.push_str("\n```\n\n");
             }
             if !params.is_empty() {
-                out.push_str("### 生成参数\n\n");
+                out.push_str(seepic_core::i18n::tr("### Generation Parameters"));
+                out.push_str("\n\n");
                 for (key, value) in &params {
                     out.push_str("**");
                     out.push_str(&escape_inline(key));

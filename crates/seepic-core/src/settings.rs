@@ -32,11 +32,11 @@ impl WheelAction {
     pub const ALL: [WheelAction; 3] = [WheelAction::Page, WheelAction::Scroll, WheelAction::Zoom];
 
     pub fn label(self) -> &'static str {
-        match self {
-            WheelAction::Page => "翻页",
-            WheelAction::Scroll => "滚动",
-            WheelAction::Zoom => "缩放",
-        }
+        crate::i18n::tr(match self {
+            WheelAction::Page => "Page",
+            WheelAction::Scroll => "Scroll",
+            WheelAction::Zoom => "Zoom",
+        })
     }
 }
 
@@ -61,19 +61,19 @@ impl ChromeMode {
     pub const ALL: [ChromeMode; 3] = [ChromeMode::Fixed, ChromeMode::Auto, ChromeMode::Immersive];
 
     pub fn label(self) -> &'static str {
-        match self {
-            ChromeMode::Fixed => "固定",
-            ChromeMode::Auto => "自动隐藏",
-            ChromeMode::Immersive => "沉浸",
-        }
+        crate::i18n::tr(match self {
+            ChromeMode::Fixed => "Fixed",
+            ChromeMode::Auto => "Auto-hide",
+            ChromeMode::Immersive => "Immersive",
+        })
     }
 
     pub fn description(self) -> &'static str {
-        match self {
-            ChromeMode::Fixed => "顶栏与状态栏各占一行，图像在中间",
-            ChromeMode::Auto => "两条栏浮在图像上，指针靠近边缘时出现",
-            ChromeMode::Immersive => "两条栏都隐藏，图像占满窗口",
-        }
+        crate::i18n::tr(match self {
+            ChromeMode::Fixed => "Top and status bars each take a row; the image sits between them",
+            ChromeMode::Auto => "Both bars float over the image and appear when the pointer nears the edge",
+            ChromeMode::Immersive => "Both bars are hidden; the image fills the window",
+        })
     }
 
     /// Whether the bars take their own rows, shrinking the image area.
@@ -107,11 +107,11 @@ impl ThumbnailView {
     ];
 
     pub fn label(self) -> &'static str {
-        match self {
-            ThumbnailView::Grid => "网格浮层",
-            ThumbnailView::Strip => "底部胶片条",
-            ThumbnailView::Off => "不显示",
-        }
+        crate::i18n::tr(match self {
+            ThumbnailView::Grid => "Thumbnail Grid",
+            ThumbnailView::Strip => "Bottom Filmstrip",
+            ThumbnailView::Off => "Hidden",
+        })
     }
 
     /// Whether the strip takes a row under the image.
@@ -137,11 +137,11 @@ impl ThemeMode {
     pub const ALL: [ThemeMode; 3] = [ThemeMode::Light, ThemeMode::Dark, ThemeMode::System];
 
     pub fn label(self) -> &'static str {
-        match self {
-            ThemeMode::Light => "浅色",
-            ThemeMode::Dark => "深色",
-            ThemeMode::System => "跟随系统",
-        }
+        crate::i18n::tr(match self {
+            ThemeMode::Light => "Light",
+            ThemeMode::Dark => "Dark",
+            ThemeMode::System => "Follow System",
+        })
     }
 }
 
@@ -167,14 +167,14 @@ impl MouseSlot {
     ];
 
     pub fn label(self) -> &'static str {
-        match self {
-            MouseSlot::Left => "左键",
-            MouseSlot::DoubleLeft => "双击左键",
-            MouseSlot::Middle => "中键",
-            MouseSlot::Right => "右键",
-            MouseSlot::X => "侧键 X",
-            MouseSlot::Y => "侧键 Y",
-        }
+        crate::i18n::tr(match self {
+            MouseSlot::Left => "Left Button",
+            MouseSlot::DoubleLeft => "Double-click Left",
+            MouseSlot::Middle => "Middle Button",
+            MouseSlot::Right => "Right Button",
+            MouseSlot::X => "Side Button X",
+            MouseSlot::Y => "Side Button Y",
+        })
     }
 
     /// The action bound by default.
@@ -251,16 +251,16 @@ impl ZoomPreset {
     ];
 
     pub fn label(self) -> &'static str {
-        match self {
-            ZoomPreset::Auto => "自动",
-            ZoomPreset::Actual => "原始大小",
+        crate::i18n::tr(match self {
+            ZoomPreset::Auto => "Auto",
+            ZoomPreset::Actual => "Actual Size",
             ZoomPreset::Percent100 => "100%",
             ZoomPreset::Percent125 => "125%",
             ZoomPreset::Percent150 => "150%",
             ZoomPreset::Percent175 => "175%",
             ZoomPreset::Percent200 => "200%",
             ZoomPreset::Percent250 => "250%",
-        }
+        })
     }
 
     /// The factor for this preset, or `None` when it means "fit the window".
@@ -483,6 +483,7 @@ pub struct Settings {
     pub image_blacklist: String,
 
     // ---- 语言 -----------------------------------------------------------
+    /// `"system"`, `"zh-CN"` or `"en-US"`.
     pub language: String,
 
     /// Bumped when the shape of this struct changes, so migrations can run.
@@ -607,14 +608,14 @@ impl Default for Settings {
             use_image_blacklist: false,
             image_blacklist: String::new(),
 
-            language: "zh-CN".to_string(),
+            language: "system".to_string(),
             schema_version: SCHEMA_VERSION,
         }
     }
 }
 
 /// The current config shape.
-pub const SCHEMA_VERSION: u32 = 10;
+pub const SCHEMA_VERSION: u32 = 11;
 
 /// The window size used the first time, and whenever remembering the size is off.
 pub const DEFAULT_WINDOW_SIZE: (f32, f32) = (1280., 860.);
@@ -694,6 +695,12 @@ impl Settings {
     /// Where the config file lives.
     pub fn path() -> PathBuf {
         Self::data_dir().join("config.json")
+    }
+
+    /// The interface language, resolving `"system"` against the OS.
+    pub fn effective_language(&self) -> crate::i18n::Language {
+        crate::i18n::Language::from_code(&self.language)
+            .unwrap_or_else(crate::i18n::system_language)
     }
 
     /// The size to open the main window at.
@@ -810,6 +817,11 @@ impl Settings {
         // is more useful, and the copy/move commands create it on first use.
         if self.photo_folder.trim().is_empty() {
             self.photo_folder = Self::default_photo_folder();
+        }
+        // The language switch did nothing before schema 11; its stored value
+        // was always the old forced default, so it becomes "follow system".
+        if self.schema_version < 11 && self.language == "zh-CN" {
+            self.language = "system".to_string();
         }
         if self.schema_version < SCHEMA_VERSION {
             self.schema_version = SCHEMA_VERSION;
@@ -1166,17 +1178,17 @@ impl Group {
     ];
 
     pub fn label(self) -> &'static str {
-        match self {
-            Group::General => "基础",
-            Group::Interface => "界面",
-            Group::FileAssoc => "文件关联",
-            Group::SystemMenu => "系统菜单",
-            Group::Keyboard => "键盘快捷键",
-            Group::Mouse => "鼠标操作",
-            Group::Advanced => "高级",
-            Group::Other => "其他",
-            Group::Language => "语言",
-        }
+        crate::i18n::tr(match self {
+            Group::General => "General",
+            Group::Interface => "Interface",
+            Group::FileAssoc => "File Associations",
+            Group::SystemMenu => "System Menu",
+            Group::Keyboard => "Keyboard",
+            Group::Mouse => "Mouse",
+            Group::Advanced => "Advanced",
+            Group::Other => "Other",
+            Group::Language => "Language",
+        })
     }
 }
 
@@ -1685,6 +1697,28 @@ mod tests {
         let json = r#"{"schema_version": 6, "photo_folder_1": "D:/pictures", "photo_folder_2": "E:/more"}"#;
         let settings: Settings = serde_json::from_str(json).unwrap();
         assert_eq!(settings.photo_folder, "D:/pictures");
+    }
+
+    #[test]
+    fn the_language_defaults_to_the_system_and_accepts_overrides() {
+        let mut settings = Settings::default();
+        assert_eq!(settings.language, "system");
+        settings.language = "en-US".to_string();
+        assert_eq!(
+            settings.effective_language(),
+            crate::i18n::Language::English
+        );
+        settings.language = "zh-CN".to_string();
+        assert_eq!(
+            settings.effective_language(),
+            crate::i18n::Language::Chinese
+        );
+
+        // The old forced default becomes "follow system" on migration.
+        let mut old: Settings =
+            serde_json::from_str(r#"{"schema_version":10,"language":"zh-CN"}"#).unwrap();
+        old.migrate();
+        assert_eq!(old.language, "system");
     }
 
     #[test]

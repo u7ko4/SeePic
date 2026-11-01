@@ -117,10 +117,10 @@ pub fn exif_from_bytes(bytes: &[u8]) -> Option<Exif> {
             }
             match &field.value {
                 exif::Value::Undefined(bytes, _) if bytes.len() > 64 => {
-                    format!("（{} 字节数据）", bytes.len())
+                    crate::trf!("({} bytes of data)", "（{} 字节数据）", bytes.len())
                 }
                 exif::Value::Byte(bytes) if bytes.len() > 64 => {
-                    format!("（{} 字节数据）", bytes.len())
+                    crate::trf!("({} bytes of data)", "（{} 字节数据）", bytes.len())
                 }
                 _ => value.to_string(),
             }
@@ -129,7 +129,7 @@ pub fn exif_from_bytes(bytes: &[u8]) -> Option<Exif> {
             value = value.chars().take(4000).collect::<String>() + "…";
         }
         let name = if field.tag == exif::Tag::UserComment {
-            "用户注释".to_string()
+            "User Comment".to_string()
         } else {
             field.tag.to_string()
         };

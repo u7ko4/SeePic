@@ -98,101 +98,101 @@ fn separator() -> Row {
 fn rows_for(view: &ViewerApp) -> Vec<Row> {
     let ready = view.has_images();
     vec![
-        action("上一张图片", Command::PrevImage, ready),
-        action("下一张图片", Command::NextImage, ready),
-        submenu("浏览导航", navigation_rows(ready), ready),
-        action("关闭", Command::CloseImage, ready),
+        action(seepic_core::i18n::tr("Previous Image"), Command::PrevImage, ready),
+        action(seepic_core::i18n::tr("Next Image"), Command::NextImage, ready),
+        submenu(seepic_core::i18n::tr("Navigation"), navigation_rows(ready), ready),
+        action(seepic_core::i18n::tr("Close"), Command::CloseImage, ready),
         separator(),
-        submenu("缩放工具", zoom_rows(view, ready), ready),
-        submenu("浏览方式", view_rows(view, ready), ready),
+        submenu(seepic_core::i18n::tr("Zoom Tools"), zoom_rows(view, ready), ready),
+        submenu(seepic_core::i18n::tr("View Mode"), view_rows(view, ready), ready),
         // Filters and interpolation used to be two rows; both are rarely
         // touched while reading, so they share one submenu.
-        submenu("显示效果", display_effect_rows(view, ready), ready),
-        check("EXIF 信息", Command::ToggleInfo, view.show_info, ready),
+        submenu(seepic_core::i18n::tr("Display Effects"), display_effect_rows(view, ready), ready),
+        check(seepic_core::i18n::tr("EXIF Info"), Command::ToggleInfo, view.show_info, ready),
         separator(),
         // Rotation, effects and the converter are all "adjust this picture";
         // one submenu replaces three first-level rows.
-        submenu("图像调整", adjust_rows(view, ready), ready),
+        submenu(seepic_core::i18n::tr("Image Adjustments"), adjust_rows(view, ready), ready),
         separator(),
-        action("复制到剪贴板", Command::CopyImage, ready),
-        action("复制到 图片文件夹", Command::CopyToPhotoFolder, ready),
+        action(seepic_core::i18n::tr("Copy to Clipboard"), Command::CopyImage, ready),
+        action(seepic_core::i18n::tr("Copy to Photo Folder"), Command::CopyToPhotoFolder, ready),
         // Printing, the editor and the wallpaper setter are occasional
         // destinations rather than part of a page turn.
-        submenu("更多输出", output_rows(ready), ready),
+        submenu(seepic_core::i18n::tr("More Output"), output_rows(ready), ready),
         separator(),
-        action("打开图片", Command::OpenFile, true),
-        action("打开文件夹", Command::OpenFolder, true),
+        action(seepic_core::i18n::tr("Open Image"), Command::OpenFile, true),
+        action(seepic_core::i18n::tr("Open Folder"), Command::OpenFolder, true),
         // Selection, reveal, the file clipboard and delete are object-level
         // actions; the group keeps the two openers and sort at the top.
-        submenu("文件操作", file_operation_rows(ready), true),
-        submenu("排序方式", sort_rows(view, ready), ready),
+        submenu(seepic_core::i18n::tr("File Operations"), file_operation_rows(ready), true),
+        submenu(seepic_core::i18n::tr("Sort By"), sort_rows(view, ready), ready),
         separator(),
-        action("设置", Command::Settings, true),
-        action("关于", Command::About, true),
-        action("退出", Command::Quit, true),
+        action(seepic_core::i18n::tr("Settings"), Command::Settings, true),
+        action(seepic_core::i18n::tr("About"), Command::About, true),
+        action(seepic_core::i18n::tr("Quit"), Command::Quit, true),
     ]
 }
 
 fn navigation_rows(enabled: bool) -> Vec<Row> {
     vec![
-        action("下一张图片", Command::NextImage, enabled),
-        action("上一张图片", Command::PrevImage, enabled),
-        action("首张图片", Command::FirstImage, enabled),
-        action("末尾图片", Command::LastImage, enabled),
-        action("向下10张图片", Command::Next10, enabled),
-        action("向上10张图片", Command::Prev10, enabled),
-        action("向后随机转到某张图片", Command::NextRandom, enabled),
-        action("向前随机转到某张图片", Command::PrevRandom, enabled),
-        action("下一个 文件夹/压缩包", Command::NextContainer, enabled),
-        action("上一个 文件夹/压缩包", Command::PrevContainer, enabled),
+        action(seepic_core::i18n::tr("Next Image"), Command::NextImage, enabled),
+        action(seepic_core::i18n::tr("Previous Image"), Command::PrevImage, enabled),
+        action(seepic_core::i18n::tr("First Image"), Command::FirstImage, enabled),
+        action(seepic_core::i18n::tr("Last Image"), Command::LastImage, enabled),
+        action(seepic_core::i18n::tr("Forward 10 Images"), Command::Next10, enabled),
+        action(seepic_core::i18n::tr("Back 10 Images"), Command::Prev10, enabled),
+        action(seepic_core::i18n::tr("Random Forward"), Command::NextRandom, enabled),
+        action(seepic_core::i18n::tr("Random Back"), Command::PrevRandom, enabled),
+        action(seepic_core::i18n::tr("Next Folder / Archive"), Command::NextContainer, enabled),
+        action(seepic_core::i18n::tr("Previous Folder / Archive"), Command::PrevContainer, enabled),
     ]
 }
 
 fn zoom_rows(view: &ViewerApp, enabled: bool) -> Vec<Row> {
     vec![
-        action("放大", Command::ZoomIn, enabled),
-        action("缩小", Command::ZoomOut, enabled),
-        check("锁定", Command::ToggleZoomLock, view.zoom.zoom_locked, enabled),
+        action(seepic_core::i18n::tr("Zoom In"), Command::ZoomIn, enabled),
+        action(seepic_core::i18n::tr("Zoom Out"), Command::ZoomOut, enabled),
+        check(seepic_core::i18n::tr("Lock Zoom"), Command::ToggleZoomLock, view.zoom.zoom_locked, enabled),
         action("100%", Command::ZoomActual, enabled),
-        action("放大(1%)", Command::ZoomIn1, enabled),
-        action("缩小(1%)", Command::ZoomOut1, enabled),
+        action(seepic_core::i18n::tr("Zoom In (1%)"), Command::ZoomIn1, enabled),
+        action(seepic_core::i18n::tr("Zoom Out (1%)"), Command::ZoomOut1, enabled),
     ]
 }
 
 fn view_rows(view: &ViewerApp, enabled: bool) -> Vec<Row> {
     vec![
         check(
-            "拉伸小图",
+            seepic_core::i18n::tr("Stretch Small Images"),
             Command::ToggleStretchSmall,
             view.settings.stretch_small,
             enabled,
         ),
         check(
-            "原始大小 (100%)",
+            seepic_core::i18n::tr("Actual Size (100%)"),
             Command::ViewMode100,
             view.view_mode == ViewMode::Actual,
             enabled,
         ),
         check(
-            "适合窗口",
+            seepic_core::i18n::tr("Fit Window"),
             Command::ViewModeFitWindow,
             view.view_mode == ViewMode::FitWindow,
             enabled,
         ),
         check(
-            "适合宽度",
+            seepic_core::i18n::tr("Fit Width"),
             Command::ViewModeFitWidth,
             view.view_mode == ViewMode::FitWidth,
             enabled,
         ),
         check(
-            "智能双页阅览 (左→右)",
+            seepic_core::i18n::tr("Two-Page (L→R)"),
             Command::ViewModeTwoL2R,
             view.view_mode == ViewMode::TwoPageL2R,
             enabled,
         ),
         check(
-            "智能双页阅览 (左←右)",
+            seepic_core::i18n::tr("Two-Page (R→L)"),
             Command::ViewModeTwoR2L,
             view.view_mode == ViewMode::TwoPageR2L,
             enabled,
@@ -203,19 +203,19 @@ fn view_rows(view: &ViewerApp, enabled: bool) -> Vec<Row> {
 fn filter_rows(view: &ViewerApp, enabled: bool) -> Vec<Row> {
     vec![
         check(
-            "无",
+            seepic_core::i18n::tr("None"),
             Command::FilterNone,
             view.filter == FilterMode::None,
             enabled,
         ),
         check(
-            "减淡",
+            seepic_core::i18n::tr("Soften"),
             Command::FilterSoften,
             view.filter == FilterMode::Smooth,
             enabled,
         ),
         check(
-            "减淡+锐化",
+            seepic_core::i18n::tr("Soften + Sharpen"),
             Command::FilterSoftenSharpen,
             view.filter == FilterMode::SmoothSharpen,
             enabled,
@@ -226,19 +226,19 @@ fn filter_rows(view: &ViewerApp, enabled: bool) -> Vec<Row> {
 fn interpolation_rows(view: &ViewerApp, enabled: bool) -> Vec<Row> {
     vec![
         check(
-            "Bilinear 插值 (快)",
+            seepic_core::i18n::tr("Bilinear (Fast)"),
             Command::InterpolationBilinear,
             view.interpolation == Interpolation::Bilinear,
             enabled,
         ),
         check(
-            "Bicubic 插值 (慢，高品质)",
+            seepic_core::i18n::tr("Bicubic (High Quality)"),
             Command::InterpolationBicubic,
             view.interpolation == Interpolation::Bicubic,
             enabled,
         ),
         check(
-            "Lanczos 插值 (慢，高品质)",
+            seepic_core::i18n::tr("Lanczos (High Quality)"),
             Command::InterpolationLanczos,
             view.interpolation == Interpolation::Lanczos,
             enabled,
@@ -250,25 +250,25 @@ fn rotation_rows(view: &ViewerApp, enabled: bool) -> Vec<Row> {
     let rotation = view.orientation.rotation;
     vec![
         check(
-            "不旋转",
+            seepic_core::i18n::tr("None"),
             Command::RotationNone,
             rotation == Rotation::None,
             enabled,
         ),
         check(
-            "逆时针旋转 90˚",
+            seepic_core::i18n::tr("Rotate 90° CCW"),
             Command::RotationL90,
             rotation == Rotation::Cw270,
             enabled,
         ),
         check(
-            "顺时针旋转 90˚",
+            seepic_core::i18n::tr("Rotate 90° CW"),
             Command::RotationR90,
             rotation == Rotation::Cw90,
             enabled,
         ),
         check(
-            "旋转 180°",
+            seepic_core::i18n::tr("Rotate 180°"),
             Command::Rotation180,
             rotation == Rotation::Cw180,
             enabled,
@@ -278,10 +278,10 @@ fn rotation_rows(view: &ViewerApp, enabled: bool) -> Vec<Row> {
 
 fn effect_rows(enabled: bool) -> Vec<Row> {
     vec![
-        action("反相", Command::ImageNegative, enabled),
-        action("Gamma补偿", Command::ImageGamma, enabled),
-        action("垂直翻转", Command::FlipVertical, enabled),
-        action("水平翻转", Command::FlipHorizontal, enabled),
+        action(seepic_core::i18n::tr("Negative"), Command::ImageNegative, enabled),
+        action(seepic_core::i18n::tr("Gamma"), Command::ImageGamma, enabled),
+        action(seepic_core::i18n::tr("Flip Vertical"), Command::FlipVertical, enabled),
+        action(seepic_core::i18n::tr("Flip Horizontal"), Command::FlipHorizontal, enabled),
     ]
 }
 
@@ -289,32 +289,32 @@ fn sort_rows(view: &ViewerApp, enabled: bool) -> Vec<Row> {
     let order = view.sort_order;
     vec![
         check(
-            "文件名",
+            seepic_core::i18n::tr("File Name"),
             Command::SortByName,
             order.key == SortKey::Name,
             enabled,
         ),
         check(
-            "修改日期",
+            seepic_core::i18n::tr("Modified"),
             Command::SortByDateModified,
             order.key == SortKey::DateModified,
             enabled,
         ),
         check(
-            "大小",
+            seepic_core::i18n::tr("Size"),
             Command::SortBySize,
             order.key == SortKey::Size,
             enabled,
         ),
         check(
-            "类型",
+            seepic_core::i18n::tr("Type"),
             Command::SortByType,
             order.key == SortKey::Type,
             enabled,
         ),
         separator(),
         check(
-            "降序",
+            seepic_core::i18n::tr("Descending"),
             Command::ToggleSortAscending,
             order.descending,
             enabled,
@@ -336,31 +336,31 @@ fn adjust_rows(view: &ViewerApp, enabled: bool) -> Vec<Row> {
     rows.push(separator());
     rows.extend(effect_rows(enabled));
     rows.push(separator());
-    rows.push(action("转换图片 (旋转/裁剪)", Command::Convert, enabled));
+    rows.push(action(seepic_core::i18n::tr("Convert (Rotate / Crop)"), Command::Convert, enabled));
     rows
 }
 
 /// The occasional destinations: editor, printer and wallpaper.
 fn output_rows(enabled: bool) -> Vec<Row> {
     vec![
-        action("用图像编辑器打开", Command::LaunchEditor, enabled),
-        action("打印", Command::Print, enabled),
-        action("设为桌面壁纸...", Command::WallpaperDlg, enabled),
+        action(seepic_core::i18n::tr("Open in Editor"), Command::LaunchEditor, enabled),
+        action(seepic_core::i18n::tr("Print"), Command::Print, enabled),
+        action(seepic_core::i18n::tr("Set as Wallpaper..."), Command::WallpaperDlg, enabled),
     ]
 }
 
 /// Selection, reveal and the file clipboard, one level below the openers.
 fn file_operation_rows(enabled: bool) -> Vec<Row> {
     vec![
-        action("选择图片", Command::SelectImage, enabled),
-        action("定位文件", Command::RevealInFolder, enabled),
-        action("复制图像文件", Command::CopyFile, enabled),
-        action("剪切图像文件", Command::CutFile, enabled),
+        action(seepic_core::i18n::tr("Select Image"), Command::SelectImage, enabled),
+        action(seepic_core::i18n::tr("Reveal in Folder"), Command::RevealInFolder, enabled),
+        action(seepic_core::i18n::tr("Copy Image File"), Command::CopyFile, enabled),
+        action(seepic_core::i18n::tr("Cut Image File"), Command::CutFile, enabled),
         // Pasting an image from the system clipboard, or a file into the
         // photo folder, is useful even with no image open.
-        action("粘贴", Command::Paste, true),
+        action(seepic_core::i18n::tr("Paste"), Command::Paste, true),
         separator(),
-        action("删除", Command::DeleteFile, enabled),
+        action(seepic_core::i18n::tr("Delete"), Command::DeleteFile, enabled),
     ]
 }
 

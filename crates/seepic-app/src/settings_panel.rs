@@ -120,7 +120,7 @@ fn header(cx: &mut Context<ViewerApp>) -> impl IntoElement {
                 .gap_2()
                 .items_center()
                 .child(Icon::new(IconName::Settings).size(px(16.)))
-                .child(div().text_base().font_weight(FontWeight::SEMIBOLD).child(s::SETTINGS)),
+                .child(div().text_base().font_weight(FontWeight::SEMIBOLD).child(s::SETTINGS())),
         )
         .child(
             div()
@@ -198,7 +198,7 @@ fn footer(group: Group, cx: &mut Context<ViewerApp>) -> impl IntoElement {
                     .border_1()
                     .border_color(theme.border)
                     .hover(|this| this.bg(theme.button_hover))
-                    .child("重置本页")
+                    .child(seepic_core::i18n::tr("Reset This Page"))
                     .on_click(cx.listener(move |this, _: &ClickEvent, _window, cx| {
                         this.settings.reset_group(group);
                         this.settings_changed(cx);
@@ -217,7 +217,7 @@ fn footer(group: Group, cx: &mut Context<ViewerApp>) -> impl IntoElement {
                 .bg(theme.primary)
                 .text_color(theme.primary_foreground)
                 .hover(|this| this.opacity(0.9))
-                .child(s::CONFIRM)
+                .child(s::CONFIRM())
                 .on_click(cx.listener(|this, _: &ClickEvent, _window, cx| {
                     this.show_settings = false;
                     cx.notify();
@@ -249,7 +249,7 @@ fn page_title(title: &'static str) -> impl IntoElement {
         .text_lg()
         .font_weight(FontWeight::SEMIBOLD)
         .pb_2()
-        .child(title)
+        .child(seepic_core::i18n::tr(title))
 }
 
 fn section_label(title: &'static str, cx: &Context<ViewerApp>) -> impl IntoElement {
@@ -258,7 +258,7 @@ fn section_label(title: &'static str, cx: &Context<ViewerApp>) -> impl IntoEleme
         .mt_2()
         .mb_1()
         .text_color(cx.theme().muted_foreground)
-        .child(title)
+        .child(seepic_core::i18n::tr(title))
 }
 
 fn toggle_row(
@@ -278,7 +278,7 @@ fn toggle_row(
         .justify_between()
         .items_center()
         .hover(|this| this.bg(theme.list_hover))
-        .child(div().text_sm().child(label))
+        .child(div().text_sm().child(seepic_core::i18n::tr(label)))
         .child(
             div()
                 .w(px(34.))
@@ -318,6 +318,18 @@ fn choice_row(
     set: fn(&mut ViewerApp, usize, &mut Context<ViewerApp>),
 ) -> impl IntoElement {
     let theme = cx.theme().clone();
+    let value: SharedString = value.into();
+    let value = seepic_core::i18n::tr_owned(&value)
+        .map(SharedString::from)
+        .unwrap_or(value);
+    let labels: Vec<SharedString> = labels
+        .into_iter()
+        .map(|label| {
+            seepic_core::i18n::tr_owned(&label)
+                .map(SharedString::from)
+                .unwrap_or(label)
+        })
+        .collect();
     h_flex()
         .id(label)
         .w_full()
@@ -328,7 +340,12 @@ fn choice_row(
         .justify_between()
         .items_center()
         .hover(|this| this.bg(theme.list_hover))
-        .child(div().flex_shrink_0().text_sm().child(label))
+        .child(
+            div()
+                .flex_shrink_0()
+                .text_sm()
+                .child(seepic_core::i18n::tr(label)),
+        )
         .child(
             h_flex()
                 .gap_1p5()
@@ -340,7 +357,7 @@ fn choice_row(
                         .truncate()
                         .text_sm()
                         .text_color(theme.muted_foreground)
-                        .child(value.into()),
+                        .child(value),
                 )
                 .child(
                     Icon::new(IconName::ChevronDown)
@@ -511,13 +528,21 @@ fn radio_row(
                     this.child(div().size(px(7.)).rounded_full().bg(theme.primary))
                 }),
         )
-        .child(div().flex_1().text_sm().child(label))
+        .child(
+            div()
+                .flex_1()
+                .text_sm()
+                .child(seepic_core::i18n::tr(label)),
+        )
         .on_click(cx.listener(move |this, _: &ClickEvent, window, cx| {
             crate::panels::run_action(this, action, window, cx);
         }))
 }
 
 fn info_row(label: &'static str, value: String, cx: &Context<ViewerApp>) -> impl IntoElement {
+    let value = seepic_core::i18n::tr_owned(&value)
+        .map(str::to_string)
+        .unwrap_or(value);
     h_flex()
         .w_full()
         .px_2()
@@ -529,7 +554,7 @@ fn info_row(label: &'static str, value: String, cx: &Context<ViewerApp>) -> impl
                 .flex_shrink_0()
                 .pt_1()
                 .text_sm()
-                .child(label),
+                .child(seepic_core::i18n::tr(label)),
         )
         .child(
             // `min_w_0` lets the box shrink below the length of its own text, so
@@ -552,13 +577,13 @@ fn info_row(label: &'static str, value: String, cx: &Context<ViewerApp>) -> impl
 
 fn basic_page(mut body: Div, view: &ViewerApp, cx: &mut Context<ViewerApp>) -> Div {
     body = body
-        .child(page_title("基础"))
-        .child(toggle_row("按 ESC 退出程序", view.settings.esc_to_exit, cx, |this, cx| {
+        .child(page_title(seepic_core::i18n::tr("General")))
+        .child(toggle_row(seepic_core::i18n::tr("Quit on ESC"), view.settings.esc_to_exit, cx, |this, cx| {
             this.settings.esc_to_exit = !this.settings.esc_to_exit;
             this.settings_changed(cx);
         }))
         .child(toggle_row(
-            "仅允许单个实例",
+            seepic_core::i18n::tr("Single Instance Only"),
             view.settings.single_instance,
             cx,
             |this, cx| {
@@ -566,13 +591,13 @@ fn basic_page(mut body: Div, view: &ViewerApp, cx: &mut Context<ViewerApp>) -> D
                 this.settings_changed(cx);
             },
         ))
-        .child(toggle_row("删除前先确认", view.settings.confirm_delete, cx, |this, cx| {
+        .child(toggle_row(seepic_core::i18n::tr("Confirm Before Deleting"), view.settings.confirm_delete, cx, |this, cx| {
             this.settings.confirm_delete = !this.settings.confirm_delete;
             this.settings_changed(cx);
         }))
-        .child(section_label("翻到边界时", cx))
+        .child(section_label(seepic_core::i18n::tr("At the Boundary"), cx))
         .child(choice_row(
-            "文件夹内",
+            seepic_core::i18n::tr("In a Folder"),
             view.settings.boundary_action.label(),
             BoundaryAction::ALL.iter().map(|a| a.label().into()).collect(),
             BoundaryAction::ALL
@@ -585,7 +610,7 @@ fn basic_page(mut body: Div, view: &ViewerApp, cx: &mut Context<ViewerApp>) -> D
             },
         ))
         .child(choice_row(
-            "压缩包内",
+            seepic_core::i18n::tr("In an Archive"),
             view.settings.archive_boundary_action.label(),
             BoundaryAction::ALL.iter().map(|a| a.label().into()).collect(),
             BoundaryAction::ALL
@@ -602,8 +627,8 @@ fn basic_page(mut body: Div, view: &ViewerApp, cx: &mut Context<ViewerApp>) -> D
 
 fn interface_page(mut body: Div, view: &ViewerApp, cx: &mut Context<ViewerApp>) -> Div {
     body = body
-        .child(page_title("界面"))
-        .child(section_label("界面模式", cx))
+        .child(page_title(seepic_core::i18n::tr("Interface")))
+        .child(section_label(seepic_core::i18n::tr("Chrome"), cx))
         .children(ChromeMode::ALL.into_iter().map(|mode| {
             radio_row(
                 ("chrome-mode", mode as usize),
@@ -622,7 +647,7 @@ fn interface_page(mut body: Div, view: &ViewerApp, cx: &mut Context<ViewerApp>) 
                 .text_color(cx.theme().muted_foreground)
                 .child(view.settings.chrome_mode.description()),
         )
-        .child(section_label("缩略图", cx))
+        .child(section_label(seepic_core::i18n::tr("Thumbnails"), cx))
         .children(ThumbnailView::ALL.into_iter().map(|choice| {
             radio_row(
                 ("thumbnail-view", choice as usize),
@@ -633,9 +658,9 @@ fn interface_page(mut body: Div, view: &ViewerApp, cx: &mut Context<ViewerApp>) 
             )
             .into_any_element()
         }))
-        .child(section_label("显示", cx))
+        .child(section_label(seepic_core::i18n::tr("Display"), cx))
         .child(toggle_row(
-            "顶栏图标工具栏",
+            seepic_core::i18n::tr("Top Bar Icon Toolbar"),
             view.settings.show_toolbar,
             cx,
             |this, cx| {
@@ -643,16 +668,16 @@ fn interface_page(mut body: Div, view: &ViewerApp, cx: &mut Context<ViewerApp>) 
                 this.settings_changed(cx);
             },
         ))
-        .child(toggle_row("图像边框", view.settings.show_border, cx, |this, cx| {
+        .child(toggle_row(seepic_core::i18n::tr("Image Border"), view.settings.show_border, cx, |this, cx| {
             this.settings.show_border = !this.settings.show_border;
             this.settings_changed(cx);
         }))
-        .child(toggle_row("左右翻页箭头", view.settings.show_side_arrows, cx, |this, cx| {
+        .child(toggle_row(seepic_core::i18n::tr("Page Arrows"), view.settings.show_side_arrows, cx, |this, cx| {
             this.settings.show_side_arrows = !this.settings.show_side_arrows;
             this.settings_changed(cx);
         }))
         .child(toggle_row(
-            "动画帧信息",
+            seepic_core::i18n::tr("Animation Frame Info"),
             view.settings.show_anim_info,
             cx,
             |this, cx| {
@@ -660,12 +685,12 @@ fn interface_page(mut body: Div, view: &ViewerApp, cx: &mut Context<ViewerApp>) 
                 this.settings_changed(cx);
             },
         ))
-        .child(toggle_row("操作提示", view.settings.show_message, cx, |this, cx| {
+        .child(toggle_row(seepic_core::i18n::tr("Operation"), view.settings.show_message, cx, |this, cx| {
             this.settings.show_message = !this.settings.show_message;
             this.settings_changed(cx);
         }))
         .child(toggle_row(
-            "单击画布切换界面",
+            seepic_core::i18n::tr("Click Canvas to Toggle Chrome"),
             view.settings.click_canvas_shows_chrome,
             cx,
             |this, cx| {
@@ -673,9 +698,9 @@ fn interface_page(mut body: Div, view: &ViewerApp, cx: &mut Context<ViewerApp>) 
                 this.settings_changed(cx);
             },
         ))
-        .child(section_label("图像显示", cx))
+        .child(section_label(seepic_core::i18n::tr("Image Display"), cx))
         .child(toggle_row(
-            "按 EXIF 方向自动旋转",
+            seepic_core::i18n::tr("Auto-rotate by EXIF"),
             view.settings.exif_rotate,
             cx,
             |this, cx| {
@@ -684,7 +709,7 @@ fn interface_page(mut body: Div, view: &ViewerApp, cx: &mut Context<ViewerApp>) 
             },
         ))
         .child(choice_row(
-            "透明背景",
+            seepic_core::i18n::tr("Transparent Background"),
             view.settings.transparency.label(),
             Transparency::ALL.iter().map(|t| t.label().into()).collect(),
             Transparency::ALL
@@ -697,7 +722,7 @@ fn interface_page(mut body: Div, view: &ViewerApp, cx: &mut Context<ViewerApp>) 
             },
         ))
         .child(choice_row(
-            "打开时的缩放",
+            seepic_core::i18n::tr("Zoom When Opened"),
             view.settings.zoom_preset.label(),
             ZoomPreset::ALL.iter().map(|z| z.label().into()).collect(),
             ZoomPreset::ALL
@@ -709,13 +734,13 @@ fn interface_page(mut body: Div, view: &ViewerApp, cx: &mut Context<ViewerApp>) 
                 this.settings_changed(cx);
             },
         ))
-        .child(toggle_row("小图拉伸至窗口", view.settings.stretch_small, cx, |this, cx| {
+        .child(toggle_row(seepic_core::i18n::tr("Stretch Small Images"), view.settings.stretch_small, cx, |this, cx| {
             this.settings.stretch_small = !this.settings.stretch_small;
             this.settings_changed(cx);
         }))
-        .child(section_label("外观", cx))
+        .child(section_label(seepic_core::i18n::tr("Appearance"), cx))
         .child(choice_row(
-            "主题",
+            seepic_core::i18n::tr("Theme"),
             view.settings.theme_mode.label(),
             ThemeMode::ALL.iter().map(|t| t.label().into()).collect(),
             ThemeMode::ALL
@@ -727,17 +752,17 @@ fn interface_page(mut body: Div, view: &ViewerApp, cx: &mut Context<ViewerApp>) 
                 this.settings_changed(cx);
             },
         ))
-        .child(section_label("窗口", cx))
-        .child(toggle_row("窗口置顶", view.settings.always_on_top, cx, |this, cx| {
+        .child(section_label(seepic_core::i18n::tr("Window"), cx))
+        .child(toggle_row(seepic_core::i18n::tr("Always on Top"), view.settings.always_on_top, cx, |this, cx| {
             this.settings.always_on_top = !this.settings.always_on_top;
             this.settings_changed(cx);
         }))
-        .child(toggle_row("窗口吸附", view.settings.snap_windows, cx, |this, cx| {
+        .child(toggle_row(seepic_core::i18n::tr("Snap Windows"), view.settings.snap_windows, cx, |this, cx| {
             this.settings.snap_windows = !this.settings.snap_windows;
             this.settings_changed(cx);
         }))
         .child(toggle_row(
-            "记住窗口大小",
+            seepic_core::i18n::tr("Remember Window Size"),
             view.settings.remember_window_size,
             cx,
             |this, cx| {
@@ -750,14 +775,14 @@ fn interface_page(mut body: Div, view: &ViewerApp, cx: &mut Context<ViewerApp>) 
 
 fn advanced_page(mut body: Div, view: &ViewerApp, cx: &mut Context<ViewerApp>) -> Div {
     body = body
-        .child(page_title("高级"))
-        .child(section_label("缓存与解码", cx))
-        .child(toggle_row("预缓存相邻图片", view.settings.cache_next, cx, |this, cx| {
+        .child(page_title(seepic_core::i18n::tr("Advanced")))
+        .child(section_label(seepic_core::i18n::tr("Cache & Decode"), cx))
+        .child(toggle_row(seepic_core::i18n::tr("Pre-cache Neighbours"), view.settings.cache_next, cx, |this, cx| {
             this.settings.cache_next = !this.settings.cache_next;
             this.settings_changed(cx);
         }))
         .child(choice_row(
-            "内存预算",
+            seepic_core::i18n::tr("Memory Budget"),
             format!("{} MB", view.settings.memory_budget_mb),
             MEMORY_BUDGET_CHOICES
                 .iter()
@@ -773,17 +798,17 @@ fn advanced_page(mut body: Div, view: &ViewerApp, cx: &mut Context<ViewerApp>) -
             },
         ))
         .child(info_row(
-            "预算分配",
+            seepic_core::i18n::tr("Budget Allocation"),
             if view.settings.swap_frames {
                 // The decoded pixels are file pages, so the decode share is not
                 // memory at all any more; it is spent on the swap store's disk.
-                format!(
+                seepic_core::trf!("{} (decode → swap / textures {}, capped)",
                     "{}（解码 → 交换页 / 纹理 {}，缓存上限）",
                     view.settings.memory_budget_mb,
                     view.settings.render_budget() / (1024 * 1024),
                 )
             } else {
-                format!(
+                seepic_core::trf!("{} (decode {} / textures {}, capped)",
                     "{}（解码 {} / 纹理 {}，缓存上限）",
                     view.settings.memory_budget_mb,
                     view.settings.decode_budget() / (1024 * 1024),
@@ -793,7 +818,7 @@ fn advanced_page(mut body: Div, view: &ViewerApp, cx: &mut Context<ViewerApp>) -
             cx,
         ))
         .child(toggle_row(
-            "先显示低清预览",
+            seepic_core::i18n::tr("Low-quality Preview First"),
             view.settings.low_quality_preview,
             cx,
             |this, cx| {
@@ -802,7 +827,7 @@ fn advanced_page(mut body: Div, view: &ViewerApp, cx: &mut Context<ViewerApp>) -
             },
         ))
         .child(choice_row(
-            "解码最长边上限",
+            seepic_core::i18n::tr("Max Decode Edge"),
             format!("{} px", view.settings.decode_max_edge()),
             DECODE_EDGES
                 .iter()
@@ -818,8 +843,8 @@ fn advanced_page(mut body: Div, view: &ViewerApp, cx: &mut Context<ViewerApp>) -
             },
         ))
         .child(info_row(
-            "单帧最大",
-            format!(
+            seepic_core::i18n::tr("Largest Frame"),
+            seepic_core::trf!("About {} MB ({} × {} × 4)",
                 "约 {} MB（{} × {} × 4）",
                 view.settings.decode_max_edge() as usize * view.settings.decode_max_edge() as usize
                     * 4
@@ -830,18 +855,18 @@ fn advanced_page(mut body: Div, view: &ViewerApp, cx: &mut Context<ViewerApp>) -
             cx,
         ))
         .child(choice_row(
-            "预取窗口",
+            seepic_core::i18n::tr("Prefetch Window"),
             match view.settings.prefetch_window {
-                0 => "不预取".to_string(),
-                n => format!("前后各 {n} 张"),
+                0 => seepic_core::i18n::tr("No prefetch").to_string(),
+                n => seepic_core::trf!("{} images on each side", "前后各 {} 张", n),
             },
             PREFETCH_WINDOWS
                 .iter()
                 .map(|n| {
                     if *n == 0 {
-                        "不预取".to_string().into()
+                        seepic_core::i18n::tr("No prefetch").to_string().into()
                     } else {
-                        format!("前后各 {n} 张").into()
+                        seepic_core::trf!("{} images on each side", "前后各 {} 张", *n).into()
                     }
                 })
                 .collect(),
@@ -854,18 +879,18 @@ fn advanced_page(mut body: Div, view: &ViewerApp, cx: &mut Context<ViewerApp>) -
                 this.settings_changed(cx);
             },
         ))
-        .child(section_label("解码调度", cx))
+        .child(section_label(seepic_core::i18n::tr("Decode Scheduling"), cx))
         .child(choice_row(
-            "并行解码数",
+            seepic_core::i18n::tr("Parallel Decodes"),
             match view.settings.decode_workers {
-                1 => "1（串行）".to_string(),
+                1 => seepic_core::i18n::tr("1 (serial)").to_string(),
                 n => format!("{n}"),
             },
             DECODE_WORKERS
                 .iter()
                 .map(|n| {
                     if *n == 1 {
-                        "1（串行）".to_string().into()
+                        seepic_core::i18n::tr("1 (serial)").to_string().into()
                     } else {
                         format!("{n}").into()
                     }
@@ -881,18 +906,18 @@ fn advanced_page(mut body: Div, view: &ViewerApp, cx: &mut Context<ViewerApp>) -
             },
         ))
         .child(choice_row(
-            "预生成页数",
+            seepic_core::i18n::tr("Prepared Pages"),
             match view.settings.prepare_pages {
-                0 => "关闭".to_string(),
-                n => format!("{n} 页"),
+                0 => seepic_core::i18n::tr("Close").to_string(),
+                n => seepic_core::trf!("{} pages", "{} 页", n),
             },
             PREPARE_PAGES
                 .iter()
                 .map(|n| {
                     if *n == 0 {
-                        "关闭".to_string().into()
+                        seepic_core::i18n::tr("Close").to_string().into()
                     } else {
-                        format!("{n} 页").into()
+                        seepic_core::trf!("{} pages", "{} 页", *n).into()
                     }
                 })
                 .collect(),
@@ -906,11 +931,11 @@ fn advanced_page(mut body: Div, view: &ViewerApp, cx: &mut Context<ViewerApp>) -
             },
         ))
         .child(choice_row(
-            "解码缓存页数",
-            format!("{} 页", view.settings.cache_pages),
+            seepic_core::i18n::tr("Decoded Cache Pages"),
+            seepic_core::trf!("{} pages", "{} 页", view.settings.cache_pages),
             CACHE_PAGES
                 .iter()
-                .map(|n| format!("{n} 页").into())
+                .map(|n| seepic_core::trf!("{} pages", "{} 页", *n).into())
                 .collect(),
             CACHE_PAGES
                 .iter()
@@ -922,14 +947,14 @@ fn advanced_page(mut body: Div, view: &ViewerApp, cx: &mut Context<ViewerApp>) -
             },
         ))
         .child(info_row(
-            "解码调度说明",
-            "并行解码数是同时解码的页数（含当前页）：1 为串行，每次只解当前页；2 及以上让相邻页与当前页并行，按住方向键时翻得更快，代价是同时有 2–4 份解码瞬时内存（20 MP 渐进式约 100 MB 一份）。预生成页数是空闲时提前解码的页数，每页约等于绘制尺寸（5–8 MB），总量上限 192 MB。解码缓存页数限制保留的已解码页；交换页开启时实际深度还受槽位数限制。"
+            seepic_core::i18n::tr("Decode Scheduling"),
+            seepic_core::i18n::tr("Parallel decodes is the number of pages decoded at once (including the current one): 1 is serial; 2+ decodes neighbours alongside the current page, making held-arrow paging faster at the cost of 2–4 transient decoded frames (about 100 MB each for a 20 MP progressive image). Prepared pages are decoded ahead while idle, roughly the drawn size (5–8 MB each), capped at 192 MB. Decoded cache pages bounds retained decoded pages; with the swap store on, the real depth is also limited by slots.")
                 .to_string(),
             cx,
         ))
-        .child(section_label("内存交换页", cx))
+        .child(section_label(seepic_core::i18n::tr("Memory Swap Pages"), cx))
         .child(toggle_row(
-            "启用内存交换页",
+            seepic_core::i18n::tr("Enable Memory Swap"),
             view.settings.swap_frames,
             cx,
             |this, cx| {
@@ -938,13 +963,13 @@ fn advanced_page(mut body: Div, view: &ViewerApp, cx: &mut Context<ViewerApp>) -
             },
         ))
         .child(info_row(
-            "交换页说明",
-            "与内存缓存二选一：开启后解码结果放在映射的临时文件里（同样占用物理内存，但算作文件页，进程私有内存不再随打开过的图片数增长），内存预算只用于纹理；空闲预生成的页和小于槽位四分之一的帧仍留在内存，总量由「预生成页数」限制。关闭后只放在内存里。"
+            seepic_core::i18n::tr("Swap Store"),
+            seepic_core::i18n::tr("Either this or the in-memory cache: decoded frames go into mapped temporary files (they still use physical memory, but as file pages, so private memory no longer grows with the number of images opened). The memory budget is then used for textures only; prepared pages and frames smaller than a quarter of a slot stay in memory, bounded by “Prepared pages”. When off, frames stay in memory only.")
                 .to_string(),
             cx,
         ))
         .child(choice_row(
-            "槽位数",
+            seepic_core::i18n::tr("Slots"),
             format!("{}", view.settings.swap_slots),
             SWAP_SLOTS.iter().map(|n| format!("{n}").into()).collect(),
             SWAP_SLOTS
@@ -957,7 +982,7 @@ fn advanced_page(mut body: Div, view: &ViewerApp, cx: &mut Context<ViewerApp>) -
             },
         ))
         .child(choice_row(
-            "单个槽位大小",
+            seepic_core::i18n::tr("Slot Size"),
             format!("{} MB", view.settings.swap_slot_mb),
             SWAP_SLOT_MB
                 .iter()
@@ -973,7 +998,7 @@ fn advanced_page(mut body: Div, view: &ViewerApp, cx: &mut Context<ViewerApp>) -
             },
         ))
         .child(choice_row(
-            "磁盘预留上限",
+            seepic_core::i18n::tr("Disk Reservation Cap"),
             format!("{} MB", view.settings.swap_capacity_mb),
             SWAP_CAPACITY_MB
                 .iter()
@@ -990,7 +1015,7 @@ fn advanced_page(mut body: Div, view: &ViewerApp, cx: &mut Context<ViewerApp>) -
         ))
         .child(swap_usage_row(view, cx))
         .child(toggle_row(
-            "使用图片 ICC 配置",
+            seepic_core::i18n::tr("Use Image ICC Profile"),
             view.settings.use_image_icc,
             cx,
             |this, cx| {
@@ -999,7 +1024,7 @@ fn advanced_page(mut body: Div, view: &ViewerApp, cx: &mut Context<ViewerApp>) -
             },
         ))
         .child(toggle_row(
-            "使用显示器 ICC 配置",
+            seepic_core::i18n::tr("Use Monitor ICC Profile"),
             view.settings.use_monitor_icc,
             cx,
             |this, cx| {
@@ -1007,7 +1032,7 @@ fn advanced_page(mut body: Div, view: &ViewerApp, cx: &mut Context<ViewerApp>) -
                 this.settings_changed(cx);
             },
         ))
-        .child(section_label("接受的文件", cx))
+        .child(section_label(seepic_core::i18n::tr("Accepted Files"), cx))
         .child(
             div()
                 .px_2()
@@ -1015,11 +1040,11 @@ fn advanced_page(mut body: Div, view: &ViewerApp, cx: &mut Context<ViewerApp>) -
                 .text_xs()
                 .text_color(cx.theme().muted_foreground)
                 .child(
-                    "白名单与黑名单按扩展名匹配，只影响文件夹与压缩包里的条目是否列出。",
+                    seepic_core::i18n::tr("The whitelist and blacklist match extensions and only decide whether entries in folders and archives are listed."),
                 ),
         )
         .child(toggle_row(
-            "仅列出白名单扩展名",
+            seepic_core::i18n::tr("Only List Whitelist Extensions"),
             view.settings.use_image_whitelist,
             cx,
             |this, cx| {
@@ -1027,9 +1052,9 @@ fn advanced_page(mut body: Div, view: &ViewerApp, cx: &mut Context<ViewerApp>) -
                 this.settings_changed(cx);
             },
         ))
-        .child(info_row("白名单扩展名", view.settings.image_whitelist.clone(), cx))
+        .child(info_row(seepic_core::i18n::tr("Whitelist Extensions"), view.settings.image_whitelist.clone(), cx))
         .child(toggle_row(
-            "忽略黑名单扩展名",
+            seepic_core::i18n::tr("Ignore Blacklist Extensions"),
             view.settings.use_image_blacklist,
             cx,
             |this, cx| {
@@ -1037,15 +1062,15 @@ fn advanced_page(mut body: Div, view: &ViewerApp, cx: &mut Context<ViewerApp>) -
                 this.settings_changed(cx);
             },
         ))
-        .child(info_row("黑名单扩展名", view.settings.image_blacklist.clone(), cx));
+        .child(info_row(seepic_core::i18n::tr("Blacklist Extensions"), view.settings.image_blacklist.clone(), cx));
     body
 }
 
 fn keyboard_page(mut body: Div, view: &ViewerApp, cx: &mut Context<ViewerApp>) -> Div {
     body = body
-        .child(page_title("键盘快捷键"))
+        .child(page_title(seepic_core::i18n::tr("Keyboard")))
         .child(toggle_row(
-            "方向键仅用于滚动",
+            seepic_core::i18n::tr("Arrow Keys Scroll Only"),
             view.settings.arrow_scroll_only,
             cx,
             |this, cx| {
@@ -1059,8 +1084,7 @@ fn keyboard_page(mut body: Div, view: &ViewerApp, cx: &mut Context<ViewerApp>) -
                 .text_xs()
                 .text_color(cx.theme().muted_foreground)
                 .child(
-                    "全部指令及其默认快捷键如下。表头「启用」列表示该指令可以绑定；\
-                     点「录制」后按下新的组合键即可改绑；与其它指令的默认键冲突时会被拒绝。带「自定义」标记的是改过的键，点「清除」恢复默认。",
+                    seepic_core::i18n::tr("Every command and its default shortcut. “Enabled” means the command can be bound; click “Record” and press a new chord to rebind it. Conflicts with another command’s default are rejected. A “custom” mark means the key was changed; “Clear” restores the default."),
                 ),
         );
 
@@ -1077,7 +1101,7 @@ fn keyboard_page(mut body: Div, view: &ViewerApp, cx: &mut Context<ViewerApp>) -
             let binding = view
                 .settings
                 .effective_binding(command)
-                .unwrap_or_else(|| "无".to_string());
+                .unwrap_or_else(|| seepic_core::i18n::tr("None").to_string());
             let recording = view.recording_key == Some(command);
             let theme = cx.theme().clone();
             let is_default = command.default_binding().is_some();
@@ -1111,7 +1135,7 @@ fn keyboard_page(mut body: Div, view: &ViewerApp, cx: &mut Context<ViewerApp>) -
                                 theme.muted_foreground
                             })
                             .child(if recording {
-                                "按下新键…".to_string()
+                                seepic_core::i18n::tr("Press a New Key…").to_string()
                             } else if custom {
                                 format!("{binding}（自定义）")
                             } else {
@@ -1126,9 +1150,9 @@ fn keyboard_page(mut body: Div, view: &ViewerApp, cx: &mut Context<ViewerApp>) -
                             .text_color(theme.muted_foreground)
                             .child(command.id()),
                     )
-                    .child(key_action("录制", recording, command, true, cx))
+                    .child(key_action(seepic_core::i18n::tr("Record"), recording, command, true, cx))
                     .when(custom, |this| {
-                        this.child(key_action("清除", false, command, false, cx))
+                        this.child(key_action(seepic_core::i18n::tr("Clear"), false, command, false, cx))
                     })
                     .child(div().flex_1().text_sm().child(command.label())),
             );
@@ -1169,13 +1193,13 @@ fn key_action(
 
 fn mouse_page(mut body: Div, view: &ViewerApp, cx: &mut Context<ViewerApp>) -> Div {
     body = body
-        .child(page_title("鼠标操作"))
+        .child(page_title(seepic_core::i18n::tr("Mouse")))
         .child(
             div()
                 .pb_2()
                 .text_xs()
                 .text_color(cx.theme().muted_foreground)
-                .child("每个按键可绑定任意指令；点「选择指令」打开命令列表。"),
+                .child(seepic_core::i18n::tr("Each key can run any command; click “Choose Command” to open the list.")),
         );
 
     for slot in MouseSlot::ALL {
@@ -1189,7 +1213,7 @@ fn mouse_page(mut body: Div, view: &ViewerApp, cx: &mut Context<ViewerApp>) -> D
             .and_then(|binding| binding.command.as_deref())
             .and_then(Command::from_id)
             .map(|command| command.label().to_string())
-            .unwrap_or_else(|| "无操作".to_string());
+            .unwrap_or_else(|| seepic_core::i18n::tr("Do Nothing").to_string());
 
         body = body
             .child(toggle_row(
@@ -1243,7 +1267,7 @@ fn mouse_page(mut body: Div, view: &ViewerApp, cx: &mut Context<ViewerApp>) -> D
                             .border_1()
                             .border_color(cx.theme().border)
                             .hover(|this| this.bg(cx.theme().button_hover))
-                            .child("选择指令")
+                            .child(seepic_core::i18n::tr("Choose Command"))
                             .on_click(cx.listener(move |this, _: &ClickEvent, _window, cx| {
                                 this.open_command_picker(Some(slot), cx);
                             })),
@@ -1252,9 +1276,9 @@ fn mouse_page(mut body: Div, view: &ViewerApp, cx: &mut Context<ViewerApp>) -> D
     }
 
     body = body
-        .child(section_label("滚轮", cx))
+        .child(section_label(seepic_core::i18n::tr("Wheel"), cx))
         .child(choice_row(
-            "滚轮功能",
+            seepic_core::i18n::tr("Wheel Action"),
             view.settings.wheel_action.label(),
             WheelAction::ALL.iter().map(|a| a.label().into()).collect(),
             WheelAction::ALL
@@ -1267,7 +1291,7 @@ fn mouse_page(mut body: Div, view: &ViewerApp, cx: &mut Context<ViewerApp>) -> D
             },
         ))
         .child(choice_row(
-            "滚动速度",
+            seepic_core::i18n::tr("Wheel Speed"),
             speed_label(view.settings.wheel_speed),
             WHEEL_SPEEDS
                 .iter()
@@ -1283,7 +1307,7 @@ fn mouse_page(mut body: Div, view: &ViewerApp, cx: &mut Context<ViewerApp>) -> D
             },
         ))
         .child(toggle_row(
-            "翻页时使用滚动回弹",
+            seepic_core::i18n::tr("Wheel Bounce"),
             view.settings.wheel_bounce,
             cx,
             |this, cx| {
@@ -1292,7 +1316,7 @@ fn mouse_page(mut body: Div, view: &ViewerApp, cx: &mut Context<ViewerApp>) -> D
             },
         ))
         .child(toggle_row(
-            "单击两侧翻页",
+            seepic_core::i18n::tr("Click Edges to Turn Pages"),
             view.settings.click_edges_to_page,
             cx,
             |this, cx| {
@@ -1330,9 +1354,9 @@ fn set_mouse_enabled(view: &mut ViewerApp, slot: MouseSlot, cx: &mut Context<Vie
 
 fn speed_label(speed: u8) -> &'static str {
     match speed {
-        0..=2 => "慢",
-        3..=4 => "正常",
-        _ => "快",
+        0..=2 => seepic_core::i18n::tr("Slow"),
+        3..=4 => seepic_core::i18n::tr("Normal"),
+        _ => seepic_core::i18n::tr("Fast"),
     }
 }
 
@@ -1346,7 +1370,7 @@ fn swap_usage_row(view: &ViewerApp, cx: &Context<ViewerApp>) -> AnyElement {
     let stats = view.swap_stats();
     let reserved = config.slots * config.slot_bytes / (1024 * 1024);
     let usable = config.usable_slots();
-    let mut text = format!(
+    let mut text = seepic_core::trf!("Mapped {} / {} MB · {} slot files · {} reused · {} MB reserved",
         "已映射 {} / {} MB · 槽位文件 {} · 复用 {} · 预留磁盘 {} MB",
         stats.mapped_bytes / (1024 * 1024),
         config.capacity_bytes / (1024 * 1024),
@@ -1355,10 +1379,16 @@ fn swap_usage_row(view: &ViewerApp, cx: &Context<ViewerApp>) -> AnyElement {
         reserved
     );
     if usable < config.slots {
-        text.push_str(&format!("（上限只够 {usable} 个槽位）"));
+        text.push_str(&seepic_core::trf!(" (cap fits only {} slots)",
+            "（上限只够 {} 个槽位）",
+            usable
+        ));
     }
     if stats.refused > 0 {
-        text.push_str(&format!(" · 留在堆上 {} 张", stats.refused));
+        text.push_str(&seepic_core::trf!(" · {} frames left on the heap",
+            " · 留在堆上 {} 张",
+            stats.refused
+        ));
     }
     // With the store on, the decoded cache is sized from the disk reservation
     // rather than the memory budget — but only the large frames are in slot
@@ -1366,14 +1396,14 @@ fn swap_usage_row(view: &ViewerApp, cx: &Context<ViewerApp>) -> AnyElement {
     // they do.
     let cache = view.cache_usage();
     if view.settings.swap_frames {
-        text.push_str(&format!(
+        text.push_str(&seepic_core::trf!(" · decoded cache {} / {} MB ({} pages; large frames in swap, prepared pages in memory)",
             " · 解码缓存 {} / {} MB（{} 页，大图在交换页，预生成页在内存）",
             cache.0 / (1024 * 1024),
             cache.1 / (1024 * 1024),
             cache.2
         ));
     }
-    info_row("交换页占用", text, cx).into_any_element()
+    info_row(seepic_core::i18n::tr("Swap Usage"), text, cx).into_any_element()
 }
 
 /// The format-association page.
@@ -1385,15 +1415,14 @@ fn swap_usage_row(view: &ViewerApp, cx: &Context<ViewerApp>) -> AnyElement {
 /// handler and points at the system page where the user confirms the default.
 fn assoc_page(mut body: Div, _view: &ViewerApp, cx: &mut Context<ViewerApp>) -> Div {
     body = body
-        .child(page_title("文件关联"))
+        .child(page_title(seepic_core::i18n::tr("File Associations")))
         .child(
             div()
                 .pb_2()
                 .text_xs()
                 .text_color(cx.theme().muted_foreground)
                 .child(
-                    "把 SeePic 注册为下列格式的打开方式。系统已有默认应用时，\
-                     Windows 10/11 不允许程序直接替换：请在系统设置中选择 SeePic。",
+                    seepic_core::i18n::tr("Register SeePic as a handler for the formats below. Windows 10/11 does not let a program replace an existing default; choose SeePic in Windows Settings after registering."),
                 ),
         )
         .child(
@@ -1402,10 +1431,10 @@ fn assoc_page(mut body: Div, _view: &ViewerApp, cx: &mut Context<ViewerApp>) -> 
                 .pb_1()
                 .gap_2()
                 .flex_wrap()
-                .child(primary_button("关联全部格式", cx, register_all_formats))
-                .child(button("解除全部关联", cx, unregister_all_formats))
+                .child(primary_button(seepic_core::i18n::tr("Register All Formats"), cx, register_all_formats))
+                .child(button(seepic_core::i18n::tr("Remove All Associations"), cx, unregister_all_formats))
                 .child(button(
-                    "打开默认应用设置",
+                    seepic_core::i18n::tr("Open Default Apps"),
                     cx,
                     open_system_default_apps,
                 )),
@@ -1450,7 +1479,7 @@ fn unregister_all_formats(this: &mut ViewerApp, cx: &mut Context<ViewerApp>) {
 
 fn open_system_default_apps(this: &mut ViewerApp, cx: &mut Context<ViewerApp>) {
     if !crate::file_assoc::open_default_apps() {
-        this.push_toast("无法打开系统默认应用设置", true, cx);
+        this.push_toast(seepic_core::i18n::tr("Could not open Default Apps"), true, cx);
     }
     cx.notify();
 }
@@ -1463,7 +1492,7 @@ fn assoc_row(extension: &'static str, cx: &mut Context<ViewerApp>) -> impl IntoE
     let owner = match (&state.owner, state.is_default) {
         (_, true) => "SeePic".to_string(),
         (Some(owner), _) => owner.clone(),
-        (None, _) => "未关联".to_string(),
+        (None, _) => seepic_core::i18n::tr("Not associated").to_string(),
     };
     let owner_color = if state.is_default {
         theme.primary
@@ -1510,7 +1539,7 @@ fn assoc_row(extension: &'static str, cx: &mut Context<ViewerApp>) -> impl IntoE
                             .flex_shrink_0()
                             .text_xs()
                             .text_color(theme.muted_foreground)
-                            .child("· SeePic 可选"),
+                            .child(seepic_core::i18n::tr(" · SeePic available")),
                     )
                 }),
         )
@@ -1528,7 +1557,7 @@ fn assoc_row(extension: &'static str, cx: &mut Context<ViewerApp>) -> impl IntoE
                     theme.primary
                 })
                 .hover(|this| this.bg(theme.button_hover))
-                .child(if registered { "解除" } else { "关联" })
+                .child(if registered { seepic_core::i18n::tr("Remove") } else { seepic_core::i18n::tr("Register") })
                 .on_click(cx.listener(move |this, _: &ClickEvent, _window, cx| {
                     let outcome = if registered {
                         crate::file_assoc::unregister(extension)
@@ -1597,20 +1626,20 @@ fn primary_button(
 pub(crate) fn association_table() -> Vec<(&'static str, Vec<&'static str>)> {
     vec![
         (
-            "通用图像格式",
+            seepic_core::i18n::tr("Common Image Formats"),
             vec![
                 "jpg", "jpeg", "jpe", "jfif", "png", "apng", "gif", "webp", "bmp", "dib", "ico",
                 "tif", "tiff", "tga",
             ],
         ),
         (
-            "其他图像格式",
+            seepic_core::i18n::tr("Other Image Formats"),
             vec![
                 "pnm", "pbm", "pgm", "ppm", "pam", "dds", "hdr", "exr", "qoi", "ff", "farbfeld",
             ],
         ),
-        ("漫画压缩包", vec!["cbz", "cbr", "cb7", "cbt"]),
-        ("其他压缩包", vec!["zip", "7z", "rar", "tar"]),
+        (seepic_core::i18n::tr("Comic Archives"), vec!["cbz", "cbr", "cb7", "cbt"]),
+        (seepic_core::i18n::tr("Other Archives"), vec!["zip", "7z", "rar", "tar"]),
     ]
 }
 
@@ -1624,9 +1653,9 @@ fn shell_page(mut body: Div, view: &ViewerApp, cx: &mut Context<ViewerApp>) -> D
     let mut options = v_flex().w_full();
     if settings.shell_menu_enable {
         options = options
-            .child(section_label("右键菜单项", cx))
+            .child(section_label(seepic_core::i18n::tr("Context Menu Items"), cx))
             .child(toggle_row(
-                "浏览图片",
+                seepic_core::i18n::tr("Browse Images"),
                 settings.shell_menu_viewer,
                 cx,
                 |this, cx| {
@@ -1635,7 +1664,7 @@ fn shell_page(mut body: Div, view: &ViewerApp, cx: &mut Context<ViewerApp>) -> D
                 },
             ))
             .child(toggle_row(
-                "转换图片",
+                seepic_core::i18n::tr("Convert"),
                 settings.shell_menu_convert,
                 cx,
                 |this, cx| {
@@ -1644,7 +1673,7 @@ fn shell_page(mut body: Div, view: &ViewerApp, cx: &mut Context<ViewerApp>) -> D
                 },
             ))
             .child(toggle_row(
-                "转换项仅在按住 Shift 时显示",
+                seepic_core::i18n::tr("Show Convert Only with Shift"),
                 settings.shell_menu_convert_shift,
                 cx,
                 |this, cx| {
@@ -1654,7 +1683,7 @@ fn shell_page(mut body: Div, view: &ViewerApp, cx: &mut Context<ViewerApp>) -> D
                 },
             ))
             .child(toggle_row(
-                "在文件夹上显示",
+                seepic_core::i18n::tr("Show on Folders"),
                 settings.shell_menu_on_folder,
                 cx,
                 |this, cx| {
@@ -1663,7 +1692,7 @@ fn shell_page(mut body: Div, view: &ViewerApp, cx: &mut Context<ViewerApp>) -> D
                 },
             ))
             .child(toggle_row(
-                "在文件夹空白处显示",
+                seepic_core::i18n::tr("Show on Folder Background"),
                 settings.shell_menu_on_background,
                 cx,
                 |this, cx| {
@@ -1672,9 +1701,9 @@ fn shell_page(mut body: Div, view: &ViewerApp, cx: &mut Context<ViewerApp>) -> D
                     this.settings_changed(cx);
                 },
             ))
-            .child(section_label("菜单图标", cx))
+            .child(section_label(seepic_core::i18n::tr("Menu Icons"), cx))
             .child(toggle_row(
-                "显示程序图标",
+                seepic_core::i18n::tr("Show Program Icon"),
                 settings.shell_preview_icon,
                 cx,
                 |this, cx| {
@@ -1685,19 +1714,18 @@ fn shell_page(mut body: Div, view: &ViewerApp, cx: &mut Context<ViewerApp>) -> D
     }
 
     body = body
-        .child(page_title("系统菜单"))
+        .child(page_title(seepic_core::i18n::tr("System Menu")))
         .child(
             div()
                 .pb_2()
                 .text_xs()
                 .text_color(cx.theme().muted_foreground)
                 .child(
-                    "在资源管理器中右键图片、文件夹或文件夹空白处即可看到菜单项。\
-                     设置写入当前用户注册表，切换后立即生效，不需要管理员权限。",
+                    seepic_core::i18n::tr("Right-click an image, a folder, or folder background in Explorer to see these items. Settings are written to the current user’s registry and apply immediately; no administrator rights are needed."),
                 ),
         )
         .child(toggle_row(
-            "添加到资源管理器右键菜单",
+            seepic_core::i18n::tr("Add to Explorer Context Menu"),
             settings.shell_menu_enable,
             cx,
             |this, cx| {
@@ -1722,8 +1750,7 @@ fn shell_page(mut body: Div, view: &ViewerApp, cx: &mut Context<ViewerApp>) -> D
                 .text_xs()
                 .text_color(cx.theme().muted_foreground)
                 .child(
-                    "Windows 11 的经典右键菜单项位于「显示更多选项」中。\
-                     资源管理器缩略图预览需要额外的 COM 组件，当前构建不包含。",
+                    seepic_core::i18n::tr("Windows 11 keeps classic context-menu items under “Show more options”. Explorer thumbnail previews need an extra COM component, which this build does not include."),
                 ),
         );
     body
@@ -1732,12 +1759,12 @@ fn shell_page(mut body: Div, view: &ViewerApp, cx: &mut Context<ViewerApp>) -> D
 fn other_page(mut body: Div, view: &ViewerApp, cx: &mut Context<ViewerApp>) -> Div {
     let folder = view.settings.photo_folder.clone();
     body = body
-        .child(page_title("其他"))
-        .child(section_label("图片文件夹", cx))
+        .child(page_title(seepic_core::i18n::tr("Other")))
+        .child(section_label(seepic_core::i18n::tr("Photo Folder"), cx))
         .child(info_row(
-            "路径",
+            seepic_core::i18n::tr("Path"),
             if folder.trim().is_empty() {
-                "（未设置）".to_string()
+                seepic_core::i18n::tr("(not set)").to_string()
             } else {
                 folder
             },
@@ -1749,8 +1776,8 @@ fn other_page(mut body: Div, view: &ViewerApp, cx: &mut Context<ViewerApp>) -> D
                 .px_2()
                 .py_1p5()
                 .gap_2()
-                .child(button("选择目录…", cx, |this, cx| this.pick_photo_folder(cx)))
-                .child(button("打开目录", cx, |this, cx| this.open_photo_folder(cx))),
+                .child(button(seepic_core::i18n::tr("Choose Folder…"), cx, |this, cx| this.pick_photo_folder(cx)))
+                .child(button(seepic_core::i18n::tr("Open Folder"), cx, |this, cx| this.open_photo_folder(cx))),
         )
         .child(
             div()
@@ -1758,11 +1785,11 @@ fn other_page(mut body: Div, view: &ViewerApp, cx: &mut Context<ViewerApp>) -> D
                 .pb_1()
                 .text_xs()
                 .text_color(cx.theme().muted_foreground)
-                .child("供复制与移动命令使用；同名文件会自动改名，不会覆盖。"),
+                .child(seepic_core::i18n::tr("Used by copy and move; duplicate names get a suffix instead of overwriting.")),
         )
-        .child(section_label("位置记忆", cx))
+        .child(section_label(seepic_core::i18n::tr("Position Memory"), cx))
         .child(toggle_row(
-            "压缩包内记住最后浏览页",
+            seepic_core::i18n::tr("Remember Page in Archive"),
             view.settings.remember_archive_position,
             cx,
             |this, cx| {
@@ -1771,7 +1798,7 @@ fn other_page(mut body: Div, view: &ViewerApp, cx: &mut Context<ViewerApp>) -> D
             },
         ))
         .child(toggle_row(
-            "文件夹内记住最后查看的图片",
+            seepic_core::i18n::tr("Remember Page in Folder"),
             view.settings.remember_folder_position,
             cx,
             |this, cx| {
@@ -1779,11 +1806,11 @@ fn other_page(mut body: Div, view: &ViewerApp, cx: &mut Context<ViewerApp>) -> D
                 this.settings_changed(cx);
             },
         ))
-        .child(info_row("收藏夹目录", "（尚未接入）".to_string(), cx))
-        .child(info_row("最近打开", "（尚未接入）".to_string(), cx))
-        .child(section_label("其他", cx))
+        .child(info_row(seepic_core::i18n::tr("Bookmarks Folder"), seepic_core::i18n::tr("(not connected yet)").to_string(), cx))
+        .child(info_row(seepic_core::i18n::tr("Recent"), seepic_core::i18n::tr("(not connected yet)").to_string(), cx))
+        .child(section_label(seepic_core::i18n::tr("Other"), cx))
         .child(choice_row(
-            "提示消息显示时间",
+            seepic_core::i18n::tr("Toast Duration"),
             format!("{} 秒", view.settings.toast_seconds),
             TOAST_SECONDS
                 .iter()
@@ -1799,7 +1826,7 @@ fn other_page(mut body: Div, view: &ViewerApp, cx: &mut Context<ViewerApp>) -> D
             },
         ))
         .child(toggle_row(
-            "翻页音效",
+            seepic_core::i18n::tr("Page Turn Sound"),
             view.settings.page_turn_sound,
             cx,
             |this, cx| {
@@ -1808,7 +1835,7 @@ fn other_page(mut body: Div, view: &ViewerApp, cx: &mut Context<ViewerApp>) -> D
             },
         ))
         .child(toggle_row(
-            "使用自定义临时目录",
+            seepic_core::i18n::tr("Use Custom Temporary Folder"),
             view.settings.use_user_temp_folder,
             cx,
             |this, cx| {
@@ -1816,9 +1843,9 @@ fn other_page(mut body: Div, view: &ViewerApp, cx: &mut Context<ViewerApp>) -> D
                 this.settings_changed(cx);
             },
         ))
-        .child(section_label("临时目录", cx))
+        .child(section_label(seepic_core::i18n::tr("Temporary Folder"), cx))
         .child(info_row(
-            "路径",
+            seepic_core::i18n::tr("Path"),
             {
                 let value = view.settings.temp_folder.clone();
                 if value.is_empty() {
@@ -1829,20 +1856,20 @@ fn other_page(mut body: Div, view: &ViewerApp, cx: &mut Context<ViewerApp>) -> D
             },
             cx,
         ))
-        .child(section_label("图像编辑器", cx))
+        .child(section_label(seepic_core::i18n::tr("Image Editor"), cx))
         .child(info_row(
-            "程序",
+            seepic_core::i18n::tr("Program"),
             if view.settings.external_editor.trim().is_empty() {
-                "系统默认程序".to_string()
+                seepic_core::i18n::tr("System Default Program").to_string()
             } else {
                 view.settings.external_editor.clone()
             },
             cx,
         ))
-        .child(section_label("配置文件", cx))
-        .child(info_row("路径", Settings::path().display().to_string(), cx))
+        .child(section_label(seepic_core::i18n::tr("Configuration File"), cx))
+        .child(info_row(seepic_core::i18n::tr("Path"), Settings::path().display().to_string(), cx))
         .child(info_row(
-            "配置版本",
+            seepic_core::i18n::tr("Config Version"),
             format!(
                 "{}（当前 {}）",
                 view.settings.schema_version,
@@ -1856,8 +1883,8 @@ fn other_page(mut body: Div, view: &ViewerApp, cx: &mut Context<ViewerApp>) -> D
                 .px_2()
                 .py_1p5()
                 .gap_2()
-                .child(button("导出配置…", cx, |this, cx| this.export_settings(cx)))
-                .child(button("导入配置…", cx, |this, cx| this.import_settings(cx))),
+                .child(button(seepic_core::i18n::tr("Export Settings…"), cx, |this, cx| this.export_settings(cx)))
+                .child(button(seepic_core::i18n::tr("Import Settings…"), cx, |this, cx| this.import_settings(cx))),
         )
         .child(
             div()
@@ -1865,7 +1892,7 @@ fn other_page(mut body: Div, view: &ViewerApp, cx: &mut Context<ViewerApp>) -> D
                 .pb_2()
                 .text_xs()
                 .text_color(cx.theme().muted_foreground)
-                .child("导出完整 JSON 配置，可用于备份或迁移到其他电脑。"),
+                .child(seepic_core::i18n::tr("Exports the complete JSON settings file for backup or moving to another computer.")),
         );
     body
 }
@@ -1888,21 +1915,65 @@ fn button(
         .text_sm()
         .cursor_pointer()
         .hover(|this| this.bg(theme.button_hover))
-        .child(label)
+        .child(seepic_core::i18n::tr(label))
         .on_click(cx.listener(move |this, _: &ClickEvent, _window, cx| on_click(this, cx)))
 }
 
-fn language_page(mut body: Div, _view: &ViewerApp, cx: &mut Context<ViewerApp>) -> Div {
+fn language_page(mut body: Div, view: &ViewerApp, cx: &mut Context<ViewerApp>) -> Div {
+    let settings = &view.settings;
+    let selected = seepic_core::i18n::Language::from_code(settings.language.as_str())
+        .map(|language| {
+            seepic_core::i18n::Language::ALL
+                .iter()
+                .position(|candidate| *candidate == language)
+                .unwrap_or(0)
+                + 1
+        })
+        .unwrap_or(0);
+    let current = settings.effective_language();
+    let value = if selected == 0 {
+        format!(
+            "{} ({})",
+            seepic_core::i18n::tr("Follow System"),
+            current.native_label()
+        )
+    } else {
+        current.native_label().to_string()
+    };
+    let labels: Vec<SharedString> = std::iter::once(seepic_core::i18n::tr("Follow System"))
+        .chain(
+            seepic_core::i18n::Language::ALL
+                .iter()
+                .map(|language| language.native_label()),
+        )
+        .map(SharedString::from)
+        .collect();
+
     body = body
-        .child(page_title("语言"))
-        .child(info_row("界面语言", "中文（简体）".to_string(), cx))
+        .child(page_title(seepic_core::i18n::tr("Language")))
+        .child(choice_row(
+            seepic_core::i18n::tr("Interface Language"),
+            value,
+            labels,
+            Some(selected),
+            cx,
+            |this, index, cx| {
+                this.settings.language = match index {
+                    0 => "system".to_string(),
+                    _ => seepic_core::i18n::Language::ALL[index - 1]
+                        .code()
+                        .to_string(),
+                };
+                this.settings_changed(cx);
+            },
+        ))
         .child(
             div()
                 .pt_3()
                 .text_xs()
                 .text_color(cx.theme().muted_foreground)
-                .child("当前仅提供简体中文；文案集中管理，便于后续接入多语言。"),
+                .child(seepic_core::i18n::tr("Changes take effect immediately.")),
         )
-        .child(info_row("配置文件", Settings::path().display().to_string(), cx));
+        .child(info_row(seepic_core::i18n::tr("Configuration File"), Settings::path().display().to_string(), cx));
     body
 }
