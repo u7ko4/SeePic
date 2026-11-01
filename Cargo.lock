@@ -5807,7 +5807,7 @@ dependencies = [
 
 [[package]]
 name = "seepic-app"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "embed-resource",
@@ -5821,7 +5821,7 @@ dependencies = [
 
 [[package]]
 name = "seepic-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "fast_image_resize",
