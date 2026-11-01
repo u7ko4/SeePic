@@ -42,11 +42,11 @@ jobs:
         run: |
           $tag = $env:GITHUB_REF_NAME
           $name = "seepic-$tag-windows-x64"
+          $stage = "target/package/$name"
+          New-Item -ItemType Directory -Force -Path $stage | Out-Null
+          Copy-Item target/release/seepic.exe "$stage/seepic.exe"
           New-Item -ItemType Directory -Force -Path dist | Out-Null
-          Copy-Item target/release/seepic.exe dist/seepic.exe
-          Compress-Archive -Path dist/seepic.exe -DestinationPath "dist/$name.zip" -Force
-          $hash = (Get-FileHash "dist/$name.zip" -Algorithm SHA256).Hash.ToLower()
-          Set-Content -NoNewline -Path dist/SHA256SUMS.txt -Value "$hash  $name.zip" -Encoding ascii
+          Compress-Archive -Path "$stage/*" -DestinationPath "dist/$name.zip" -Force
           "PACKAGE_NAME=$name" >> $env:GITHUB_ENV
 
       - name: Create GitHub release
@@ -57,6 +57,4 @@ jobs:
           generate_release_notes: true
           fail_on_unmatched_files: true
           files: |
-            dist/seepic.exe
             dist/${{ env.PACKAGE_NAME }}.zip
-            dist/SHA256SUMS.txt
