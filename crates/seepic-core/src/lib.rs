@@ -4,6 +4,7 @@
 //! is unit-testable without a display.
 
 pub mod archive;
+pub mod batch;
 pub mod command;
 pub mod cache;
 pub mod container;

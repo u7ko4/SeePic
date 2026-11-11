@@ -96,9 +96,9 @@ impl Item {
     }
 }
 
-/// Height of a clickable menu row, and of a separator.
-const ROW_HEIGHT: f32 = 24.;
-const SEPARATOR_HEIGHT: f32 = 9.;
+/// Height of a clickable menu row, and of a separator, shared with the canvas
+/// context menu so the two surfaces keep the same vertical rhythm.
+use crate::context_menu::{ROW_HEIGHT, SEPARATOR_HEIGHT};
 /// Width of a dropdown panel, matching the canvas context menu.
 const DROPDOWN_WIDTH: f32 = 260.;
 
@@ -337,14 +337,17 @@ pub fn menus_fit(window: &Window) -> bool {
 /// The row itself: title, menus, optional icon group, and the two window-wide
 /// toggles. Both bars share it, so they cannot drift apart.
 fn bar_row(view: &ViewerApp, window: &Window, cx: &mut Context<ViewerApp>) -> impl IntoElement {
-    let theme = cx.theme().clone();
     // The bar gives parts up as the window narrows, in the order that costs the
     // reader least: the icon group (its commands live in the menus and the
     // status bar), then the menu titles themselves (the keyboard still has every
     // command), leaving the title and the window buttons.
     let width = f32::from(window.bounds().size.width);
     let show_tools = view.settings.show_toolbar && width >= TOOLBAR_MIN_WIDTH;
-    let show_menus = menus_fit(window);
+    let can_menus = menus_fit(window);
+    // Collapsed, the bar is one hamburger plus the current image's name.
+    // Expanded, the hamburger gives way to the menu titles, which start at the
+    // bar's left edge.
+    let show_menus = view.menus_open && can_menus;
     // The menu buttons are direct children, not a nested row, so their
     // prepaint indices line up with `MENUS`.
     let mut row = h_flex()
@@ -353,12 +356,17 @@ fn bar_row(view: &ViewerApp, window: &Window, cx: &mut Context<ViewerApp>) -> im
         .pr_3()
         .gap_2()
         .items_center()
-        .text_sm()
-        .child(title_content(view, cx));
+        .text_sm();
     if show_menus {
-        row = row.child(div().flex_shrink_0().w(px(1.)).h(px(18.)).bg(theme.border));
         for (menu, label) in menus() {
             row = row.child(menu_button(menu, label, view, cx));
+        }
+    } else {
+        if can_menus {
+            row = row.child(menu_toggle(view, cx));
+        }
+        if view.has_images() {
+            row = row.child(title_content(view, cx));
         }
     }
     // The icon group is optional: the same commands are in the menus, the
@@ -421,16 +429,17 @@ fn bar_row(view: &ViewerApp, window: &Window, cx: &mut Context<ViewerApp>) -> im
     // positions itself in.
     .on_children_prepainted({
         let entity = cx.entity();
-        move |bounds: Vec<Bounds<Pixels>>, _window, cx: &mut App| {
+        move |bounds: Vec<Bounds<Pixels>>, window, cx: &mut App| {
             entity.update(cx, |this, cx| {
                 let mut changed = false;
-                // Children in order, when the menus are drawn: the title
-                // content, the divider, then the menu titles. With the menus
-                // hidden there is no button for a dropdown to hang from.
+                // Children in order, when the menus are drawn: the menu
+                // titles start at the left edge, with no hamburger before
+                // them. With the menus hidden there is no button for a
+                // dropdown to hang from.
                 for (index, (menu, _)) in menus().iter().enumerate() {
                     let slot = &mut this.menu_anchors[*menu as usize];
                     let wanted = if show_menus {
-                        bounds.get(index + 2).map(|bounds| {
+                        bounds.get(index).map(|bounds| {
                             (
                                 f32::from(bounds.origin.x),
                                 f32::from(bounds.origin.y + bounds.size.height),
@@ -444,6 +453,21 @@ fn bar_row(view: &ViewerApp, window: &Window, cx: &mut Context<ViewerApp>) -> im
                         changed = true;
                     }
                 }
+                // The hamburger opens the bar with its first dropdown already
+                // showing. Waiting until the anchor is measured keeps the
+                // panel from flashing at the window's top-left corner.
+                if this.menus_open
+                    && this.menu_auto_open
+                    && this.menu_anchors[Menu::File as usize].is_some()
+                {
+                    this.menu_auto_open = false;
+                    this.open_menu = Some(Menu::File);
+                    this.menu_submenu = None;
+                    // The notify below only marks the entity dirty; without a
+                    // frame request the dropdown waits for the next mouse move.
+                    window.request_animation_frame();
+                    changed = true;
+                }
                 if changed {
                     cx.notify();
                 }
@@ -452,7 +476,43 @@ fn bar_row(view: &ViewerApp, window: &Window, cx: &mut Context<ViewerApp>) -> im
     })
 }
 
-/// The icon, the file name and the position, in the order that answers
+/// The hamburger that reveals the menu titles.
+///
+/// The default bar is deliberately quiet: one button, then the file name. A
+/// press on the hamburger swaps the name for 文件/视图/图像/更多; pressing it
+/// again, or anywhere outside the bar, swaps them back.
+fn menu_toggle(view: &ViewerApp, cx: &mut Context<ViewerApp>) -> impl IntoElement {
+    let theme = cx.theme().clone();
+    div()
+        .id("chrome-menus")
+        .flex()
+        .size(px(28.))
+        .flex_shrink_0()
+        .items_center()
+        .justify_center()
+        .rounded(px(5.))
+        .cursor_pointer()
+        .when(view.menus_open, |this| this.bg(theme.button_active))
+        .hover(|this| this.bg(theme.button_hover))
+        .child(
+            Icon::new(IconName::Menu)
+                .size(px(16.))
+                .text_color(theme.foreground),
+        )
+        // Stop the root's "click outside dismisses" handler: this press is the
+        // toggle, not a click on the window behind it.
+        .on_mouse_down(
+            MouseButton::Left,
+            cx.listener(|_this, _: &MouseDownEvent, _window, cx| {
+                cx.stop_propagation();
+            }),
+        )
+        .on_click(cx.listener(|this, _: &ClickEvent, _window, cx| {
+            this.toggle_menus(cx);
+        }))
+}
+
+/// The file name and the position, in the order that answers
 /// "where am I?".
 fn title_content(view: &ViewerApp, cx: &mut Context<ViewerApp>) -> impl IntoElement {
     let theme = cx.theme().clone();
@@ -464,12 +524,6 @@ fn title_content(view: &ViewerApp, cx: &mut Context<ViewerApp>) -> impl IntoElem
         // ellipsis it still says which file is open, while the menus and the
         // window buttons have no shorter form.
         .min_w_0()
-        .child(
-            Icon::new(IconName::Image)
-                .size(px(16.))
-                .flex_shrink_0()
-                .text_color(theme.primary),
-        )
         .child(
             div()
                 .max_w(px(420.))
@@ -666,6 +720,12 @@ fn menu_button(
                 .when(is_open, |this| this.bg(theme.button_active))
                 .hover(|this| this.bg(theme.button_hover))
                 .child(label)
+                .on_mouse_down(
+                    MouseButton::Left,
+                    cx.listener(|_this, _: &MouseDownEvent, _window, cx| {
+                        cx.stop_propagation();
+                    }),
+                )
                 .on_click(cx.listener(move |this, _: &ClickEvent, _window, cx| {
                     this.toggle_menu(menu);
                     cx.notify();
@@ -916,12 +976,7 @@ fn dropdown(
                                 Item::Submenu(label, menu) => {
                                     submenu_row(label, *menu, selected, view, cx).into_any_element()
                                 }
-                                Item::Separator => div()
-                                    .mx_2()
-                                    .my_1()
-                                    .h(px(1.))
-                                    .bg(cx.theme().border)
-                                    .into_any_element(),
+                                Item::Separator => crate::context_menu::separator_line(cx),
                             }
                         })
                         .collect::<Vec<_>>()
@@ -1102,6 +1157,7 @@ fn menu_row(
         .when(enabled, |this| {
             this.on_click(cx.listener(move |this, _: &ClickEvent, window, cx| {
                 this.close_menu();
+                this.menus_open = false;
                 this.execute(command, window, cx);
             }))
         })
@@ -1166,7 +1222,7 @@ fn command_is_available(command: Command, view: &ViewerApp) -> bool {
     match command {
         CloseImage | SaveResized | CopyImage | CopyResized | CopyPath | CopyFile | CutFile
         | CopyExif | Paste | BookmarkAdd | LaunchEditor | WallpaperDlg | PopupMeta | Print
-        | Convert | Rename | DeleteFile | SelectImage => {
+        | Rename | DeleteFile | SelectImage => {
             // These need something to act on, except Paste and the pickers.
             matches!(command, Paste | SelectImage | Rename | DeleteFile)
                 || view.has_images()
@@ -1199,6 +1255,13 @@ pub fn menu_items(menu: Menu) -> Vec<Item> {
             cmd(Command::OpenFolder),
             cmd(Command::NewWindow),
             cmd(Command::OpenRecent),
+            // The converter is its own group; a one-pixel divider keeps the
+            // grouping without widening the gap between the text rows.
+            Item::Separator,
+            Item::Labeled(
+                seepic_core::i18n::tr("Batch Image Convert…"),
+                Command::Convert,
+            ),
             Item::Separator,
             sub(seepic_core::i18n::tr("File Operations"), Menu::FileOps),
             sub(seepic_core::i18n::tr("Output"), Menu::Output),
@@ -1215,7 +1278,6 @@ pub fn menu_items(menu: Menu) -> Vec<Item> {
         ],
         Menu::Output => vec![
             cmd(Command::Print),
-            cmd(Command::Convert),
             Item::Labeled(seepic_core::i18n::tr("Save As Seen"), Command::SaveResized),
         ],
         Menu::View => vec![

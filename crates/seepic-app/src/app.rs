@@ -35,6 +35,7 @@ use crate::{
     canvas, confirm_dialog, contact_sheet, context_menu, menu_bar, panels,
     password_dialog, settings_panel, status_bar, thumbnails, wallpaper,
 };
+use crate::batch_window::{BatchInput, BatchWindow};
 use crate::info_window::InfoWindow;
 
 /// Where the configuration file lives.
@@ -457,6 +458,13 @@ pub struct ViewerApp {
 
     /// Which top-level menu dropdown is open, if any.
     pub open_menu: Option<Menu>,
+    /// Whether the title bar is showing the menu titles instead of the file
+    /// name. Collapsed by default; the hamburger button in the title bar
+    /// toggles it.
+    pub menus_open: bool,
+    /// The first menu should open as soon as the expanded bar has laid out,
+    /// so the dropdown can hang from its real anchor.
+    pub menu_auto_open: bool,
     /// The submenu shown beside `open_menu`, if any.
     pub menu_submenu: Option<Menu>,
     pub adjustments: Adjustments,
@@ -474,6 +482,10 @@ pub struct ViewerApp {
     info_window: Option<(AnyWindowHandle, Entity<InfoWindow>)>,
     /// Clears `show_info` when the info window is closed by its own title bar.
     info_window_subscription: Option<Subscription>,
+    /// The standalone batch conversion window.
+    batch_window: Option<(AnyWindowHandle, Entity<BatchWindow>)>,
+    /// Clears the handle when the batch window is closed by its own buttons.
+    batch_window_subscription: Option<Subscription>,
     /// Persistent configuration and the settings overlay state.
     pub settings: Settings,
     /// The context-menu state last written to the registry, so a settings
@@ -783,6 +795,8 @@ impl ViewerApp {
             slideshow_started: None,
             slideshow_tick: None,
             open_menu: None,
+            menus_open: false,
+            menu_auto_open: false,
             menu_submenu: None,
             panel_stack: Vec::new(),
             chrome_drag_armed: false,
@@ -793,6 +807,8 @@ impl ViewerApp {
             info_exif_in_flight: false,
             info_window: None,
             info_window_subscription: None,
+            batch_window: None,
+            batch_window_subscription: None,
             settings,
             applied_shell_menu: None,
             shell_menu_error: None,
@@ -900,8 +916,7 @@ impl ViewerApp {
             };
             app.open_path(&path, cx);
             if start_in_converter && app.has_images() {
-                app.convert_only = single;
-                app.convert = Some(crate::converter::ConvertDialog::new());
+                app.open_batch_window(single, cx);
             }
         }
 
@@ -1076,6 +1091,7 @@ impl ViewerApp {
             | Some(menu_bar::Item::Labeled(_, command)) => {
                 let command = *command;
                 self.close_menu();
+                self.menus_open = false;
                 self.execute(command, window, cx);
             }
             Some(menu_bar::Item::Submenu(_, submenu)) => {
@@ -1119,6 +1135,27 @@ impl ViewerApp {
         cx.notify();
     }
 
+    /// Show or hide the menu titles in the title bar.
+    ///
+    /// The collapsed bar is the default: one hamburger button plus the current
+    /// image's name. Opening the bar replaces the name with the menu titles;
+    /// closing it puts the name back.
+    pub fn toggle_menus(&mut self, cx: &mut Context<Self>) {
+        self.menus_open = !self.menus_open;
+        if self.menus_open {
+            // The first dropdown opens on the next prepaint, once its button
+            // has a measured anchor.
+            self.menu_auto_open = true;
+            self.open_menu = None;
+            self.menu_submenu = None;
+            self.menu_index = None;
+            self.panel_stack.clear();
+        } else {
+            self.close_menu();
+        }
+        cx.notify();
+    }
+
     /// Open a top-level menu, or close it when it is already the open one.
     ///
     /// Opening also dismisses a docked panel, because the panel is outside the
@@ -1156,6 +1193,7 @@ impl ViewerApp {
         self.open_menu = None;
         self.menu_submenu = None;
         self.menu_index = None;
+        self.menu_auto_open = false;
         self.menu_scroll = VirtualListScrollHandle::new();
     }
 
@@ -4793,15 +4831,109 @@ impl ViewerApp {
 
     // ---- image converter --------------------------------------------------
 
-    /// Open the converter dialog.
+    /// Open the batch converter in its own window.
+    ///
+    /// The old in-window dialog grew a queue, a preview and a report; at that
+    /// point an overlay was the wrong container. The window opens with the
+    /// images of the container the viewer is looking at, so the usual path is
+    /// still just Ctrl+T.
     pub fn open_converter(&mut self, cx: &mut Context<Self>) {
-        if !self.has_images() {
-            self.push_toast(s::NO_IMAGES_IN_ARCHIVE(), true, cx);
+        // The converter has its own add-file and add-folder buttons, so it is
+        // useful before anything is open too.
+        self.open_batch_window(None, cx);
+    }
+
+    /// Open the batch converter window for the current container.
+    ///
+    /// `only` restricts the queue to one file name, which is what the Explorer
+    /// "convert" verb wants for a single file; a folder or archive passes
+    /// `None` and converts everything inside it.
+    pub fn open_batch_window(&mut self, only: Option<String>, cx: &mut Context<Self>) {
+        if self.batch_window_open(cx) {
             return;
         }
-        self.convert_only = None;
-        self.convert = Some(crate::converter::ConvertDialog::new());
-        cx.notify();
+        let mut inputs = Vec::new();
+        if let Some(container) = self.container.clone() {
+            if let Ok(container_ref) = container.lock() {
+                let archive = container_ref.path().to_path_buf();
+                for (index, entry) in container_ref.entries().iter().enumerate() {
+                    let Some(source) = container_ref.source(index) else {
+                        continue;
+                    };
+                    let mut input = match source {
+                        seepic_core::Source::File(path) => BatchInput::file(path, None),
+                        seepic_core::Source::ArchiveMember { .. } => BatchInput::archive(
+                            container.clone(),
+                            archive.clone(),
+                            index,
+                            entry.file_name().to_string(),
+                            entry.size,
+                            entry.dimensions.map(|size| {
+                                (size.w.round() as u32, size.h.round() as u32)
+                            }),
+                            entry.modified,
+                            Some(PathBuf::from(&entry.name)),
+                        ),
+                    };
+                    input.size = entry.size;
+                    input.modified = entry.modified;
+                    if input.dimensions.is_none() {
+                        input.dimensions = entry
+                            .dimensions
+                            .map(|size| (size.w.round() as u32, size.h.round() as u32));
+                    }
+                    inputs.push(input);
+                }
+            }
+        }
+
+        let options = WindowOptions {
+            window_bounds: Some(WindowBounds::Windowed(Bounds::centered(
+                None,
+                size(px(1240.), px(830.)),
+                cx,
+            ))),
+            window_min_size: Some(size(px(980.), px(600.))),
+            // The same custom title bar as the main and info windows.
+            ..TitleBar::window_options()
+        };
+        match gpui_kit::open_window(options, cx, move |window, cx| {
+            cx.new(|cx| BatchWindow::new(inputs, only.clone(), window, cx))
+        }) {
+            Ok((handle, view)) => {
+                let window_id = handle.window_id();
+                let weak = cx.entity().downgrade();
+                self.batch_window_subscription = Some(cx.on_window_closed(move |cx, closed| {
+                    if closed == window_id {
+                        weak.update(cx, |this, cx| {
+                            this.batch_window = None;
+                            cx.notify();
+                        })
+                        .ok();
+                    }
+                }));
+                self.batch_window = Some((handle, view));
+                self.convert = None;
+                self.convert_only = None;
+                cx.notify();
+            }
+            Err(error) => {
+                self.push_toast(format!("无法打开批量转换窗口：{error}"), true, cx);
+            }
+        }
+    }
+
+    /// Whether the batch window is still open.
+    pub fn batch_window_open(&mut self, cx: &mut Context<Self>) -> bool {
+        let Some((handle, _)) = self.batch_window.clone() else {
+            return false;
+        };
+        if handle.update(cx, |_, _, _| ()).is_ok() {
+            true
+        } else {
+            self.batch_window = None;
+            false
+        }
     }
 
     pub fn close_converter(&mut self, cx: &mut Context<Self>) {
@@ -7655,8 +7787,12 @@ impl ViewerApp {
                     cx.notify();
                 } else {
                     self.close_menu();
+                    self.menus_open = false;
                     cx.notify();
                 }
+            } else if self.menus_open {
+                self.menus_open = false;
+                cx.notify();
             } else if self.show_settings {
                 self.show_settings = false;
                 cx.notify();
@@ -8386,8 +8522,12 @@ impl Render for ViewerApp {
 
         // A window too narrow for the menu titles has no button left for an
         // open dropdown to hang from, so the dropdown goes with them.
-        if self.open_menu.is_some() && !menu_bar::menus_fit(window) {
-            self.close_menu();
+        if !menu_bar::menus_fit(window) {
+            self.menus_open = false;
+            self.menu_auto_open = false;
+            if self.open_menu.is_some() {
+                self.close_menu();
+            }
         }
 
         // Keep the progress bar and animation frames moving.
@@ -8433,8 +8573,9 @@ impl Render for ViewerApp {
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(|this, _: &MouseDownEvent, _window, cx| {
-                    if this.open_menu.is_some() {
+                    if this.menus_open || this.open_menu.is_some() {
                         this.close_menu();
+                        this.menus_open = false;
                         cx.notify();
                     }
                 }),

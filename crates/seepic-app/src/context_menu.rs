@@ -24,8 +24,8 @@ pub const SUBMENU_WIDTH: f32 = 270.;
 ///
 /// Deliberately tighter than the top menus: this menu carries twenty-seven
 /// first-level rows and still has to fit a normal window.
-const ROW_HEIGHT: f32 = 24.;
-const SEPARATOR_HEIGHT: f32 = 9.;
+pub(crate) const ROW_HEIGHT: f32 = 24.;
+pub(crate) const SEPARATOR_HEIGHT: f32 = 9.;
 /// Vertical padding of a panel (`py_1`, top and bottom).
 const PANEL_PADDING: f32 = 4.;
 /// Roughly how tall the main menu is, used to keep it on screen. The exact
@@ -336,7 +336,7 @@ fn adjust_rows(view: &ViewerApp, enabled: bool) -> Vec<Row> {
     rows.push(separator());
     rows.extend(effect_rows(enabled));
     rows.push(separator());
-    rows.push(action(seepic_core::i18n::tr("Convert (Rotate / Crop)"), Command::Convert, enabled));
+    rows.push(action(seepic_core::i18n::tr("Batch Image Convert…"), Command::Convert, enabled));
     rows
 }
 
@@ -590,12 +590,22 @@ fn sub_row(
     }
 }
 
-fn separator_line(cx: &Context<ViewerApp>) -> AnyElement {
+pub(crate) fn separator_line(cx: &Context<ViewerApp>) -> AnyElement {
+    // A fixed-height row with the line centred in it. Margins on the line
+    // itself collapse differently inside the top menu's virtual list, which
+    // pushed the line towards one side of the gap.
     div()
-        .h(px(1.))
-        .mx_2()
-        .my_1()
-        .bg(cx.theme().border)
+        .w_full()
+        .h(px(SEPARATOR_HEIGHT))
+        .flex()
+        .items_center()
+        .child(
+            div()
+                .mx_2()
+                .flex_1()
+                .h(px(1.))
+                .bg(cx.theme().border),
+        )
         .into_any_element()
 }
 

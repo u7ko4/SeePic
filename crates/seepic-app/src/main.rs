@@ -6,6 +6,7 @@
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
 mod app;
+mod batch_window;
 mod boundary_prompt;
 mod image_panel;
 mod image_clipboard;
