@@ -515,6 +515,8 @@ pub struct ViewerApp {
     password_focus: FocusHandle,
     pub dialog: Option<DialogState>,
     dialog_focus: FocusHandle,
+    /// A native open-file dialog is already up.
+    file_picker_pending: bool,
     /// The image converter dialog, with its batch progress.
     pub convert: Option<crate::converter::ConvertDialog>,
     /// Set when the converter was opened from the Explorer menu for one file:
@@ -822,6 +824,7 @@ impl ViewerApp {
             password_prompt: None,
             password_focus: cx.focus_handle(),
             dialog: None,
+            file_picker_pending: false,
             convert: None,
             convert_only: None,
             page_turn: None,
@@ -7282,6 +7285,10 @@ impl ViewerApp {
     /// The dialog is modal, so blocking the UI thread while it is up is what the
     /// user experiences anyway.
     fn pick_file(&mut self, cx: &mut Context<Self>) {
+        if self.file_picker_pending {
+            return;
+        }
+        self.file_picker_pending = true;
         let dialog = rfd::FileDialog::new()
             .set_title(seepic_core::i18n::tr("Open an Image or Archive"))
             .add_filter(
@@ -7296,6 +7303,7 @@ impl ViewerApp {
             cx,
             move || dialog.pick_file(),
             |this, cx, picked| {
+                this.file_picker_pending = false;
                 if let Some(path) = picked {
                     this.open_path(&path, cx);
                 }
@@ -7890,6 +7898,17 @@ impl ViewerApp {
         // otherwise scrolling a panel would turn pages behind it.
         let pointer = IvPoint::new(f32::from(event.position.x), f32::from(event.position.y));
         if self.overlay_owns_pointer(pointer, window) {
+            return;
+        }
+
+        // Nothing is open yet: the wheel is a shortcut for "pick an image".
+        // Both directions do the same thing; the guard in `pick_file` keeps a
+        // burst of wheel events from stacking native dialogs.
+        if !self.has_images() {
+            if dy != 0. {
+                self.pick_file(cx);
+            }
+            cx.stop_propagation();
             return;
         }
 
