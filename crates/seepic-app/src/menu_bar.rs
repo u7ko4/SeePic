@@ -770,8 +770,8 @@ pub fn fullscreen_exit_overlay(view: &ViewerApp, cx: &mut Context<ViewerApp>) ->
 ///
 /// It has to be here rather than inside the bar: GPUI paints in tree order, and
 /// the bar is a flow row *above* the canvas, so a dropdown nested in it would be
-/// covered by the image. The vertical position is the clicked button's bottom;
-/// the left edge is shared by every dropdown (see `common_x` below).
+/// covered by the image. The panel hangs from the selected button: its top edge
+/// at the button's bottom and its left edge at the button's left.
 pub fn dropdown_overlay(
     view: &ViewerApp,
     window: &Window,
@@ -780,21 +780,10 @@ pub fn dropdown_overlay(
     let menu = view.open_menu?;
     let width = f32::from(window.bounds().size.width);
     let height = f32::from(window.bounds().size.height);
-    // Every panel shares one vertical edge, taken from the first menu title.
-    // Anchoring each dropdown to its own button made the list jump sideways
-    // when the user moved between 文件/视图/图像/更多.
-    let common_x = menus()
-        .iter()
-        .filter_map(|(menu, _)| view.menu_anchors.get(*menu as usize).copied().flatten())
-        .map(|(x, _)| x)
-        .fold(f32::MAX, f32::min);
-    let anchor_bottom = view
-        .menu_anchors
-        .get(menu as usize)
-        .copied()
-        .flatten()
-        .map_or(0., |(_, bottom)| bottom);
-    let left = if common_x.is_finite() { common_x } else { 8. }
+    let anchor = view.menu_anchors.get(menu as usize).copied().flatten();
+    let anchor_bottom = anchor.map_or(0., |(_, bottom)| bottom);
+    let left = anchor
+        .map_or(8., |(x, _)| x)
         .clamp(8., (width - DROPDOWN_WIDTH).max(8.));
     // The overlay is laid out inside the content area, which itself starts
     // below the chrome when the chrome takes its own rows. Subtracting that

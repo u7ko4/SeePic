@@ -1549,7 +1549,7 @@ impl Render for BatchWindow {
         let theme = cx.theme().clone();
         let title_width = (f32::from(window.bounds().size.width) - 160.).max(160.);
         let subtitle = if self.items.is_empty() {
-            tr("Convert a batch of images locally").to_string()
+            String::new()
         } else {
             format!(
                 "{} {} · {}",
@@ -2815,8 +2815,6 @@ impl BatchWindow {
         let Some(summary) = self.summary.as_ref() else {
             return empty_preview(&theme);
         };
-        let total = summary.total;
-        let conserved = summary.ok + summary.failed + summary.skipped == total;
         let size_change = if summary.input_bytes == 0 {
             0
         } else {
@@ -2825,18 +2823,7 @@ impl BatchWindow {
                 * 100.)
                 .round() as i64
         };
-        let check = format!(
-            "{} {} + {} {} + {} {} = {} {} {}",
-            summary.ok,
-            tr("success"),
-            summary.failed,
-            tr("failed"),
-            summary.skipped,
-            tr("skipped"),
-            if conserved { "=" } else { "≠" },
-            total,
-            tr("input"),
-        );
+
 
         let mut body = v_flex().w_full().flex_1().min_h_0().p_3().gap_2();
 
@@ -2888,23 +2875,7 @@ impl BatchWindow {
                         theme.foreground,
                         &theme,
                     )),
-            )
-            .child(
-                div()
-                    .w_full()
-                    .px_2()
-                    .py_1p5()
-                    .rounded(px(7.))
-                    .bg(if conserved {
-                        ok_color().opacity(0.10)
-                    } else {
-                        theme.danger.opacity(0.10)
-                    })
-                    .text_xs()
-                    .text_color(if conserved { ok_color() } else { theme.danger })
-                    .child(check),
             );
-
         if !summary.failures.is_empty() {
             let mut list = v_flex()
                 .id("batch-failures")
@@ -2914,27 +2885,38 @@ impl BatchWindow {
                 .overflow_y_scroll();
             for (name, failure) in &summary.failures {
                 list = list.child(
-                    h_flex()
+                    v_flex()
                         .w_full()
-                        .gap_2()
+                        .gap_0p5()
                         .px_2()
                         .py_1()
                         .rounded(px(6.))
                         .bg(theme.danger.opacity(0.08))
                         .text_xs()
                         .child(
-                            div()
-                                .flex_shrink_0()
-                                .font_weight(FontWeight::SEMIBOLD)
-                                .text_color(theme.danger)
-                                .child(failure.code.code()),
+                            h_flex()
+                                .w_full()
+                                .gap_2()
+                                .items_center()
+                                .child(
+                                    div()
+                                        .flex_shrink_0()
+                                        .font_weight(FontWeight::SEMIBOLD)
+                                        .text_color(theme.danger)
+                                        .child(failure.code.code()),
+                                )
+                                .child(
+                                    div()
+                                        .flex_1()
+                                        .min_w_0()
+                                        .truncate()
+                                        .child(name.clone()),
+                                ),
                         )
-                        .child(div().flex_1().min_w_0().truncate().child(name.clone()))
                         .child(
                             div()
-                                .flex_shrink_0()
-                                .max_w(px(340.))
-                                .truncate()
+                                .w_full()
+                                .whitespace_normal()
                                 .text_color(theme.muted_foreground)
                                 .child(failure.message.clone()),
                         ),
@@ -3948,7 +3930,13 @@ fn notice_bar(text: String, cx: &mut Context<BatchWindow>) -> AnyElement {
         .text_xs()
         .text_color(theme.danger)
         .child(Icon::new(IconName::TriangleAlert).size(px(13.)))
-        .child(div().flex_1().min_w_0().truncate().child(text))
+        .child(
+            div()
+                .flex_1()
+                .min_w_0()
+                .whitespace_normal()
+                .child(text),
+        )
         .child(
             div()
                 .id("batch-notice-close")
@@ -4223,7 +4211,15 @@ fn may_have_alpha(name: &str) -> bool {
 }
 
 fn render_image((width, height, data): &(u32, u32, Vec<u8>)) -> Option<PreviewImage> {
-    let buffer = image::RgbaImage::from_raw(*width, *height, data.clone())?;
+    // `batch::preview` returns ordinary RGBA, while `RenderImage` (like the
+    // viewer's decoded frames) is built from BGRA. Feeding the RGBA bytes
+    // straight in swapped red and blue: blue clothing turned orange and skin
+    // turned blue.
+    let mut bgra = data.clone();
+    for pixel in bgra.chunks_exact_mut(4) {
+        pixel.swap(0, 2);
+    }
+    let buffer = image::RgbaImage::from_raw(*width, *height, bgra)?;
     let frame = image::Frame::from_parts(buffer, 0, 0, image::Delay::from_numer_denom_ms(100, 1));
     Some(PreviewImage {
         render: Arc::new(RenderImage::new(vec![frame])),
