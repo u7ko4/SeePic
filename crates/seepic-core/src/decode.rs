@@ -232,14 +232,16 @@ fn box_downsample_bgra(
 
     for out_y in 0..out_height {
         let top = (out_y as u64 * height as u64 / out_height as u64) as u32;
-        let bottom = (((out_y as u64 + 1) * height as u64) / out_height as u64).max(top as u64 + 1) as u32;
+        let bottom =
+            (((out_y as u64 + 1) * height as u64) / out_height as u64).max(top as u64 + 1) as u32;
         // Four samples per axis across the block is enough for an average, and
         // keeps the read count proportional to the output rather than the input.
         let step_y = ((bottom - top) / 4).max(1);
 
         for out_x in 0..out_width {
             let left = (out_x as u64 * width as u64 / out_width as u64) as u32;
-            let right = (((out_x as u64 + 1) * width as u64) / out_width as u64).max(left as u64 + 1) as u32;
+            let right = (((out_x as u64 + 1) * width as u64) / out_width as u64)
+                .max(left as u64 + 1) as u32;
             let step_x = ((right - left) / 4).max(1);
 
             let (mut b, mut g, mut r, mut a, mut count) = (0u32, 0u32, 0u32, 0u32, 0u32);
@@ -345,8 +347,14 @@ pub fn decode_for_display(
     auto_rotate: bool,
     target_side: Option<u32>,
 ) -> Result<DecodedImage, DecodeError> {
-    let format = image::guess_format(bytes)
-        .map_err(|_| DecodeError::Unsupported)?;
+    if is_avif(bytes) {
+        return decode_avif(bytes, target_side);
+    }
+    if is_jxl(bytes) {
+        return decode_jxl(bytes, target_side);
+    }
+
+    let format = image::guess_format(bytes).map_err(|_| DecodeError::Unsupported)?;
 
     if format == image::ImageFormat::Gif {
         if let Some(animated) = decode_gif(bytes) {
@@ -453,7 +461,11 @@ fn jpeg_reduction(source_longest: u32, target_side: u32) -> u32 {
 ///
 /// Returns `None` when the file is not worth decoding this way, so the caller
 /// can fall back to the general decoder.
-fn decode_jpeg_scaled(bytes: &[u8], target_side: u32, orientation: Option<u8>) -> Option<DecodedImage> {
+fn decode_jpeg_scaled(
+    bytes: &[u8],
+    target_side: u32,
+    orientation: Option<u8>,
+) -> Option<DecodedImage> {
     let mut decoder = jpeg_decoder::Decoder::new(std::io::Cursor::new(bytes));
     // Read the headers first: the decoder reports the *output* size, so the
     // file's own dimensions are only visible before the scale is chosen.
@@ -482,7 +494,15 @@ fn decode_jpeg_scaled(bytes: &[u8], target_side: u32, orientation: Option<u8>) -
         return None;
     }
 
-    finish_scaled(pixels, width, height, channels, source, target_side, orientation)
+    finish_scaled(
+        pixels,
+        width,
+        height,
+        channels,
+        source,
+        target_side,
+        orientation,
+    )
 }
 
 /// Reduce a decoded JPEG to what the view asked for, and wrap it up.
@@ -624,6 +644,91 @@ fn to_bgra(pixels: Vec<u8>, channels: usize) -> Vec<u8> {
 /// RGBA and before the channel swap. A JPEG decodes to three channels, so this
 /// resizes three quarters of the pixels and expands the result once, instead of
 /// expanding, copying and converting twelve megapixels four times over.
+/// Whether these bytes are an AVIF/HEIF still or sequence.
+fn is_avif(bytes: &[u8]) -> bool {
+    if bytes.len() < 12 || &bytes[4..8] != b"ftyp" {
+        return false;
+    }
+    // `ftyp` has a major brand followed by compatible brands. The major brand
+    // may be `mif1`, with `avif` only in the compatibility list.
+    let header = &bytes[..bytes.len().min(64)];
+    header
+        .windows(4)
+        .any(|window| window == b"avif" || window == b"avis")
+}
+
+/// Whether these bytes are a JPEG XL codestream or container.
+fn is_jxl(bytes: &[u8]) -> bool {
+    bytes.starts_with(&[0xFF, 0x0A])
+        || (bytes.len() >= 12
+            && &bytes[4..8] == b"JXL "
+            && &bytes[8..12] == [0x0D, 0x0A, 0x87, 0x0A])
+}
+
+/// The `ispe` box in an AVIF/HEIF header holds the primary image's size.
+///
+/// Parsing this box is much cheaper than decoding the AV1 item just to fill in
+/// the page-size table.
+fn avif_dimensions(bytes: &[u8]) -> Option<crate::geom::Size> {
+    let info = oxideav_avif::info(bytes).ok()?;
+    (info.width > 0 && info.height > 0)
+        .then(|| crate::geom::Size::new(info.width as f32, info.height as f32))
+}
+
+fn jxl_dimensions(bytes: &[u8]) -> Option<crate::geom::Size> {
+    let image = jxl_oxide::JxlImage::builder()
+        .read(std::io::Cursor::new(bytes))
+        .ok()?;
+    Some(crate::geom::Size::new(
+        image.width() as f32,
+        image.height() as f32,
+    ))
+}
+
+fn decode_avif(bytes: &[u8], target_side: Option<u32>) -> Result<DecodedImage, DecodeError> {
+    let decoded = oxideav_avif::decode_rgba8(bytes)
+        .map_err(|error| DecodeError::Corrupt(error.to_string()))?;
+    let image = RgbaImage::from_raw(decoded.width, decoded.height, decoded.data)
+        .ok_or(DecodeError::Unsupported)?;
+    Ok(finish(DynamicImage::ImageRgba8(image), None, target_side))
+}
+
+fn decode_jxl(bytes: &[u8], target_side: Option<u32>) -> Result<DecodedImage, DecodeError> {
+    let image = jxl_oxide::JxlImage::builder()
+        .read(std::io::Cursor::new(bytes))
+        .map_err(|error| DecodeError::Corrupt(error.to_string()))?;
+    let render = image
+        .render_frame(0)
+        .map_err(|error| DecodeError::Corrupt(error.to_string()))?;
+    let dynamic = jxl_to_dynamic(&render).ok_or(DecodeError::Unsupported)?;
+    Ok(finish(dynamic, None, target_side))
+}
+
+fn jxl_to_dynamic(render: &jxl_oxide::Render) -> Option<DynamicImage> {
+    let frame = render.image_all_channels();
+    let (width, height, channels) = (frame.width(), frame.height(), frame.channels());
+    if width == 0 || height == 0 || channels == 0 {
+        return None;
+    }
+    let samples = frame.buf();
+    let mut rgba = Vec::with_capacity(width * height * 4);
+    for index in 0..width * height {
+        let offset = index * channels;
+        let sample =
+            |channel: usize| (samples[offset + channel].clamp(0., 1.) * 255.).round() as u8;
+        let (red, green, blue, alpha) = match channels {
+            1 => (sample(0), sample(0), sample(0), 255),
+            2 => (sample(0), sample(0), sample(0), sample(1)),
+            3 => (sample(0), sample(1), sample(2), 255),
+            // JPEG XL stores alpha as the extra channel after the colour
+            // channels. CMYK is rare and not handled separately here.
+            _ => (sample(0), sample(1), sample(2), sample(3)),
+        };
+        rgba.extend_from_slice(&[red, green, blue, alpha]);
+    }
+    RgbaImage::from_raw(width as u32, height as u32, rgba).map(DynamicImage::ImageRgba8)
+}
+
 fn finish(image: DynamicImage, orientation: Option<u8>, target_side: Option<u32>) -> DecodedImage {
     let source = (image.width(), image.height());
 
@@ -680,7 +785,6 @@ fn finish(image: DynamicImage, orientation: Option<u8>, target_side: Option<u32>
     }
 }
 
-
 /// The size a `width` x `height` image takes when its longest side becomes
 /// `target_side`.
 fn scaled_size(width: u32, height: u32, target_side: u32) -> (u32, u32) {
@@ -694,7 +798,6 @@ fn scaled_size(width: u32, height: u32, target_side: u32) -> (u32, u32) {
         ((height as f32 * factor).round() as u32).max(1),
     )
 }
-
 
 /// Longest side an image may keep before it is worth reducing.
 fn worth_reducing(width: u32, height: u32, target_side: u32) -> bool {
@@ -738,8 +841,7 @@ pub fn reduce_to(image: DecodedImage, target_side: u32) -> DecodedImage {
             height,
             resample::Kernel::Bilinear,
         )
-        .ok()
-        else {
+        .ok() else {
             return image;
         };
         let delay_ms = image.frames[index].delay_ms;
@@ -904,11 +1006,7 @@ fn frame_into_store(bytes: Vec<u8>, store: &crate::swap::FrameStore) -> Pixels {
 
 /// Clamp a frame delay the way browsers do.
 fn animation_delay_ms(ms: u32) -> u32 {
-    if ms == 0 {
-        100
-    } else {
-        ms.clamp(20, 10_000)
-    }
+    if ms == 0 { 100 } else { ms.clamp(20, 10_000) }
 }
 
 /// Decode every frame of an animated WebP, or `None` if the file is not one.
@@ -1026,14 +1124,9 @@ pub fn mip_chain(
         // The resampling kernel the user picked, so the interpolation setting
         // genuinely changes how the downscaled level looks.
         let source = previous.as_deref().unwrap_or(bytes);
-        let Some(next) = resample::resize_bgra_ref(
-            current_w,
-            current_h,
-            source,
-            next_w,
-            next_h,
-            kernel,
-        ) else {
+        let Some(next) =
+            resample::resize_bgra_ref(current_w, current_h, source, next_w, next_h, kernel)
+        else {
             break;
         };
         // The buffer just read is finished with, so it becomes a level now.
@@ -1206,7 +1299,13 @@ pub fn thumbnail_from_bytes(
     };
 
     let frame = decoded.frames.first()?;
-    thumbnail(decoded.width, decoded.height, &frame.bgra, max_width, max_height)
+    thumbnail(
+        decoded.width,
+        decoded.height,
+        &frame.bgra,
+        max_width,
+        max_height,
+    )
 }
 
 /// The longest side a JPEG should be decoded to for a thumbnail box.
@@ -1234,6 +1333,12 @@ fn jpeg_thumbnail_side(bytes: &[u8], target_side: u32) -> u32 {
 ///
 /// Used to fill in the file list without paying for a full decode.
 pub fn probe_dimensions(bytes: &[u8]) -> Option<crate::geom::Size> {
+    if is_avif(bytes) {
+        return avif_dimensions(bytes);
+    }
+    if is_jxl(bytes) {
+        return jxl_dimensions(bytes);
+    }
     let reader = image::ImageReader::new(std::io::Cursor::new(bytes))
         .with_guessed_format()
         .ok()?;
@@ -1328,7 +1433,12 @@ mod tests {
             image.frames[0].bgra[stride..stride * 2],
             "the decoded pixels are the picture, not a blank buffer"
         );
-        assert!(image.frames[0].bgra.chunks_exact(4).all(|pixel| pixel[3] == 255));
+        assert!(
+            image.frames[0]
+                .bgra
+                .chunks_exact(4)
+                .all(|pixel| pixel[3] == 255)
+        );
     }
 
     #[test]
@@ -1376,7 +1486,11 @@ mod tests {
     fn an_unknown_exif_orientation_is_left_alone() {
         assert!(crate::orientation::Orientation::from_exif(0).is_none());
         assert!(crate::orientation::Orientation::from_exif(9).is_none());
-        assert!(crate::orientation::Orientation::from_exif(1).unwrap().is_identity());
+        assert!(
+            crate::orientation::Orientation::from_exif(1)
+                .unwrap()
+                .is_identity()
+        );
     }
 
     #[test]
@@ -1557,7 +1671,11 @@ mod tests {
         let (out_w, out_h, out) = decoded.blur_source(2).unwrap();
         assert_eq!((out_w, out_h), (2, 1));
         assert_eq!(&out[0..4], &[0, 0, 0, 255], "left block is all black");
-        assert_eq!(&out[4..8], &[200, 200, 200, 255], "right block is all white");
+        assert_eq!(
+            &out[4..8],
+            &[200, 200, 200, 255],
+            "right block is all white"
+        );
     }
 
     #[test]
@@ -1698,7 +1816,11 @@ mod tests {
     fn the_dct_ladder_steps_down_only_as_far_as_the_request_allows() {
         // The decoder's own rule: the most aggressive IDCT whose output still
         // reaches the request.
-        assert_eq!(jpeg_reduction(6000, 6000), 1, "full size for a full request");
+        assert_eq!(
+            jpeg_reduction(6000, 6000),
+            1,
+            "full size for a full request"
+        );
         assert_eq!(jpeg_reduction(6000, 3000), 2);
         assert_eq!(jpeg_reduction(6000, 1500), 4);
         assert_eq!(jpeg_reduction(6000, 750), 8);
@@ -1919,7 +2041,11 @@ mod tests {
     fn thumbnails_never_upscale() {
         let bytes = vec![0u8; 40 * 20 * 4];
         let (w, h, out) = thumbnail(40, 20, &bytes, 100, 100).unwrap();
-        assert_eq!((w, h), (40, 20), "a small image is already its own thumbnail");
+        assert_eq!(
+            (w, h),
+            (40, 20),
+            "a small image is already its own thumbnail"
+        );
         assert_eq!(out, bytes);
     }
 
@@ -1952,7 +2078,10 @@ mod tests {
     #[test]
     fn probes_dimensions_without_a_full_decode() {
         let bytes = png(37, 19, [1, 2, 3, 255]);
-        assert_eq!(probe_dimensions(&bytes), Some(crate::geom::Size::new(37., 19.)));
+        assert_eq!(
+            probe_dimensions(&bytes),
+            Some(crate::geom::Size::new(37., 19.))
+        );
         assert_eq!(probe_dimensions(b"nonsense"), None);
     }
 
@@ -2130,6 +2259,9 @@ mod tests {
 /// This is what the persistent metadata cache stores, so a second visit to a
 /// folder or comic costs no reads at all.
 pub fn probe_details(bytes: &[u8]) -> Option<(crate::geom::Size, Option<u8>)> {
+    if is_avif(bytes) || is_jxl(bytes) {
+        return probe_dimensions(bytes).map(|size| (size, None));
+    }
     let reader = image::ImageReader::new(std::io::Cursor::new(bytes))
         .with_guessed_format()
         .ok()?;

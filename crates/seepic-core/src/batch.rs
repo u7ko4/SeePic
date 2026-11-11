@@ -153,16 +153,18 @@ pub enum BatchFormat {
     Gif,
     Bmp,
     Tiff,
+    Jxl,
     Pdf,
 }
 
 impl BatchFormat {
-    pub const ALL: [BatchFormat; 9] = [
+    pub const ALL: [BatchFormat; 10] = [
         BatchFormat::Keep,
         BatchFormat::Jpeg,
         BatchFormat::Png,
         BatchFormat::WebP,
         BatchFormat::Avif,
+        BatchFormat::Jxl,
         BatchFormat::Gif,
         BatchFormat::Bmp,
         BatchFormat::Tiff,
@@ -179,6 +181,7 @@ impl BatchFormat {
             BatchFormat::Gif => "GIF",
             BatchFormat::Bmp => "BMP",
             BatchFormat::Tiff => "TIFF",
+            BatchFormat::Jxl => "JPEG XL",
             BatchFormat::Pdf => "PDF",
         }
     }
@@ -193,6 +196,7 @@ impl BatchFormat {
             BatchFormat::Gif => "GIF",
             BatchFormat::Bmp => "BMP",
             BatchFormat::Tiff => "TIFF",
+            BatchFormat::Jxl => "JXL",
             BatchFormat::Pdf => "PDF",
         }
     }
@@ -219,6 +223,7 @@ impl BatchFormat {
             BatchFormat::Gif => "gif".to_string(),
             BatchFormat::Bmp => "bmp".to_string(),
             BatchFormat::Tiff => "tiff".to_string(),
+            BatchFormat::Jxl => "jxl".to_string(),
             BatchFormat::Pdf => "pdf".to_string(),
         }
     }
@@ -236,6 +241,7 @@ impl BatchFormat {
             "gif" => Some(BatchFormat::Gif),
             "bmp" => Some(BatchFormat::Bmp),
             "tif" | "tiff" => Some(BatchFormat::Tiff),
+            "jxl" => Some(BatchFormat::Jxl),
             "pdf" => Some(BatchFormat::Pdf),
             _ => None,
         }
@@ -251,6 +257,7 @@ impl BatchFormat {
                 | BatchFormat::Avif
                 | BatchFormat::Gif
                 | BatchFormat::Tiff
+                | BatchFormat::Jxl
         )
     }
 
@@ -1068,6 +1075,19 @@ pub fn encode(
                 )
                 .map_err(|error| BatchError::Encode(error.to_string()))?;
         }
+        BatchFormat::Jxl => {
+            let rgba = image.to_rgba8();
+            let options = zune_core::options::EncoderOptions::new(
+                rgba.width() as usize,
+                rgba.height() as usize,
+                zune_core::colorspace::ColorSpace::RGBA,
+                zune_core::bit_depth::BitDepth::Eight,
+            );
+            let encoder = zune_jpegxl::JxlSimpleEncoder::new(rgba.as_raw(), options);
+            encoder
+                .encode(&mut out)
+                .map_err(|error| BatchError::Encode(error.to_string()))?;
+        }
         BatchFormat::Keep | BatchFormat::Pdf => unreachable!("resolved before encoding"),
     }
 
@@ -1439,6 +1459,7 @@ pub fn estimate_bytes(width: u32, height: u32, format: BatchFormat, quality: u8)
         BatchFormat::Gif => 0.35,
         BatchFormat::Bmp => 3.0,
         BatchFormat::Tiff => 1.2,
+        BatchFormat::Jxl => 0.50,
         BatchFormat::Keep => 0.30,
     };
     (pixels * bytes_per_pixel).max(64.) as u64
@@ -1889,6 +1910,7 @@ mod tests {
             BatchFormat::Gif,
             BatchFormat::Bmp,
             BatchFormat::Tiff,
+            BatchFormat::Jxl,
             BatchFormat::Pdf,
         ] {
             let options = BatchOptions {
@@ -1899,23 +1921,56 @@ mod tests {
             let converted = convert(&source, "a.png", &options)
                 .unwrap_or_else(|error| panic!("{format:?} failed: {error}"));
             assert!(!converted.bytes.is_empty(), "{format:?} produced nothing");
-            match format {
-                BatchFormat::Pdf => assert!(converted.bytes.starts_with(b"%PDF-1.4")),
-                // This dependency set has an AVIF encoder but no AVIF decoder
-                // (decoding needs dav1d), so the signature is what can be
-                // checked here; the file is still a valid AVIF.
-                BatchFormat::Avif => assert!(
-                    converted
-                        .bytes
-                        .windows(12)
-                        .any(|window| window.starts_with(b"ftypavif")),
-                    "AVIF signature missing"
-                ),
-                _ => {
-                    crate::decode::decode(&converted.bytes, false)
-                        .unwrap_or_else(|error| panic!("{format:?} did not decode: {error}"));
-                }
+            if format == BatchFormat::Pdf {
+                assert!(converted.bytes.starts_with(b"%PDF-1.4"));
+            } else {
+                let decoded = crate::decode::decode(&converted.bytes, false)
+                    .unwrap_or_else(|error| panic!("{format:?} did not decode: {error}"));
+                assert_eq!(
+                    (decoded.width, decoded.height),
+                    (16, 16),
+                    "{format:?} changed the size"
+                );
             }
+        }
+    }
+
+    #[test]
+    fn avif_and_jxl_keep_the_alpha_channel() {
+        let source = png(8, 8, [10, 20, 30, 128]);
+        for format in [BatchFormat::Avif, BatchFormat::Jxl] {
+            let options = BatchOptions {
+                size: SizeMode::Original,
+                format,
+                ..Default::default()
+            };
+            let converted = convert(&source, "a.png", &options).expect("convert");
+            let decoded = crate::decode::decode(&converted.bytes, false)
+                .unwrap_or_else(|error| panic!("{format:?} did not decode: {error}"));
+            assert_eq!(
+                decoded.frames[0].bgra[3], 128,
+                "{format:?} dropped the alpha channel"
+            );
+        }
+    }
+
+    #[test]
+    fn avif_and_jxl_probe_their_headers() {
+        let source = png(32, 20, [10, 20, 30, 255]);
+        for format in [BatchFormat::Avif, BatchFormat::Jxl] {
+            let options = BatchOptions {
+                size: SizeMode::Original,
+                format,
+                ..Default::default()
+            };
+            let converted = convert(&source, "a.png", &options).expect("convert");
+            let size = crate::decode::probe_dimensions(&converted.bytes)
+                .unwrap_or_else(|| panic!("{format:?} header probe failed"));
+            assert_eq!(
+                (size.w.round() as u32, size.h.round() as u32),
+                (32, 20),
+                "{format:?} reported the wrong size"
+            );
         }
     }
 

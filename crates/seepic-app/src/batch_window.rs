@@ -2386,6 +2386,8 @@ impl BatchWindow {
             controls = controls.child(hint(
                 if format == BatchFormat::WebP {
                     tr("This build writes WebP losslessly")
+                } else if format == BatchFormat::Jxl {
+                    tr("This build writes JPEG XL losslessly")
                 } else {
                     tr("No quality setting for this format")
                 },
@@ -2824,7 +2826,6 @@ impl BatchWindow {
                 .round() as i64
         };
 
-
         let mut body = v_flex().w_full().flex_1().min_h_0().p_3().gap_2();
 
         if summary.cancelled {
@@ -2836,46 +2837,45 @@ impl BatchWindow {
             );
         }
 
-        body = body
-            .child(
-                h_flex()
-                    .w_full()
-                    .gap_2()
-                    .child(stat_box(
-                        summary.ok.to_string(),
-                        tr("Success"),
-                        ok_color(),
-                        &theme,
-                    ))
-                    .child(stat_box(
-                        summary.failed.to_string(),
-                        tr("Failed"),
-                        theme.danger,
-                        &theme,
-                    ))
-                    .child(stat_box(
-                        summary.skipped.to_string(),
-                        tr("Skipped"),
-                        theme.muted_foreground,
-                        &theme,
-                    ))
-                    .child(stat_box(
-                        format!("{}{}%", if size_change > 0 { "+" } else { "" }, size_change),
-                        tr("Volume"),
-                        if size_change <= 0 {
-                            ok_color()
-                        } else {
-                            theme.danger
-                        },
-                        &theme,
-                    ))
-                    .child(stat_box(
-                        format!("{:.1}s", summary.elapsed.as_secs_f32()),
-                        tr("Time"),
-                        theme.foreground,
-                        &theme,
-                    )),
-            );
+        body = body.child(
+            h_flex()
+                .w_full()
+                .gap_2()
+                .child(stat_box(
+                    summary.ok.to_string(),
+                    tr("Success"),
+                    ok_color(),
+                    &theme,
+                ))
+                .child(stat_box(
+                    summary.failed.to_string(),
+                    tr("Failed"),
+                    theme.danger,
+                    &theme,
+                ))
+                .child(stat_box(
+                    summary.skipped.to_string(),
+                    tr("Skipped"),
+                    theme.muted_foreground,
+                    &theme,
+                ))
+                .child(stat_box(
+                    format!("{}{}%", if size_change > 0 { "+" } else { "" }, size_change),
+                    tr("Volume"),
+                    if size_change <= 0 {
+                        ok_color()
+                    } else {
+                        theme.danger
+                    },
+                    &theme,
+                ))
+                .child(stat_box(
+                    format!("{:.1}s", summary.elapsed.as_secs_f32()),
+                    tr("Time"),
+                    theme.foreground,
+                    &theme,
+                )),
+        );
         if !summary.failures.is_empty() {
             let mut list = v_flex()
                 .id("batch-failures")
@@ -2905,13 +2905,7 @@ impl BatchWindow {
                                         .text_color(theme.danger)
                                         .child(failure.code.code()),
                                 )
-                                .child(
-                                    div()
-                                        .flex_1()
-                                        .min_w_0()
-                                        .truncate()
-                                        .child(name.clone()),
-                                ),
+                                .child(div().flex_1().min_w_0().truncate().child(name.clone())),
                         )
                         .child(
                             div()
@@ -3930,13 +3924,7 @@ fn notice_bar(text: String, cx: &mut Context<BatchWindow>) -> AnyElement {
         .text_xs()
         .text_color(theme.danger)
         .child(Icon::new(IconName::TriangleAlert).size(px(13.)))
-        .child(
-            div()
-                .flex_1()
-                .min_w_0()
-                .whitespace_normal()
-                .child(text),
-        )
+        .child(div().flex_1().min_w_0().whitespace_normal().child(text))
         .child(
             div()
                 .id("batch-notice-close")
@@ -4206,7 +4194,7 @@ fn extension(name: &str) -> String {
 fn may_have_alpha(name: &str) -> bool {
     matches!(
         extension(name).as_str(),
-        "png" | "apng" | "gif" | "webp" | "tif" | "tiff" | "avif" | "ico" | "tga"
+        "png" | "apng" | "gif" | "webp" | "tif" | "tiff" | "avif" | "jxl" | "ico" | "tga"
     )
 }
 

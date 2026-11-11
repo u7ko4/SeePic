@@ -2,16 +2,17 @@
 
 /// Extensions we can decode, without the leading dot and lowercased.
 ///
-/// Kept in sync with the `image` crate features enabled in `Cargo.toml`.
+/// This is the set the viewer and container listing offer. AVIF and JPEG XL
+/// are decoded by dedicated crates (`oxideav-avif` and `jxl-oxide`) rather than
+/// by `image`, but they belong to the same user-visible list.
 pub const IMAGE_EXTENSIONS: &[&str] = &[
-    "jpg", "jpeg", "jpe", "jfif", "png", "apng", "gif", "webp", "bmp", "dib", "ico", "tif", "tiff",
-    "tga", "pnm", "pbm", "pgm", "ppm", "pam", "dds", "hdr", "exr", "qoi", "ff", "farbfeld",
+    "jpg", "jpeg", "jpe", "jfif", "png", "apng", "gif", "webp", "avif", "jxl", "bmp", "dib", "ico",
+    "tif", "tiff", "tga", "pnm", "pbm", "pgm", "ppm", "pam", "dds", "hdr", "exr", "qoi", "ff",
+    "farbfeld",
 ];
 
 /// Extensions that hold other images inside them.
-pub const ARCHIVE_EXTENSIONS: &[&str] = &[
-    "zip", "cbz", "7z", "cb7", "rar", "cbr", "tar", "cbt",
-];
+pub const ARCHIVE_EXTENSIONS: &[&str] = &["zip", "cbz", "7z", "cb7", "rar", "cbr", "tar", "cbt"];
 
 /// True when `name` looks like something we can display directly.
 pub fn is_image_extension(name: &str) -> bool {
@@ -40,6 +41,8 @@ mod tests {
     fn recognises_plain_images() {
         assert!(is_image_extension("photo.JPG"));
         assert!(is_image_extension("a.b.png"));
+        assert!(is_image_extension("photo.avif"));
+        assert!(is_image_extension("photo.jxl"));
         assert!(!is_image_extension("notes.txt"));
         assert!(!is_image_extension("no_extension"));
         assert!(!is_image_extension("trailing."));

@@ -1628,8 +1628,8 @@ pub(crate) fn association_table() -> Vec<(&'static str, Vec<&'static str>)> {
         (
             seepic_core::i18n::tr("Common Image Formats"),
             vec![
-                "jpg", "jpeg", "jpe", "jfif", "png", "apng", "gif", "webp", "bmp", "dib", "ico",
-                "tif", "tiff", "tga",
+                "jpg", "jpeg", "jpe", "jfif", "png", "apng", "gif", "webp", "avif", "jxl",
+                "bmp", "dib", "ico", "tif", "tiff", "tga",
             ],
         ),
         (

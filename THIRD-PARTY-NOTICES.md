@@ -10,6 +10,9 @@ SeePic source.
 |---|---|---|
 | `gpui-kit`, `gpui-pre`, `gpui-base` | Apache-2.0 | UI framework, components, themes |
 | `image` | MIT OR Apache-2.0 | image decoding and encoding |
+| `oxideav-avif` / `oxideav-av1` | MIT | AVIF container and pure-Rust AV1 decoding |
+| `jxl-oxide` | MIT OR Apache-2.0 | JPEG XL decoding |
+| `zune-jpegxl` | MIT OR Apache-2.0 OR Zlib | lossless JPEG XL encoding |
 | `jpeg-decoder` | MIT OR Apache-2.0 | JPEG decoding at a reduced scale |
 | `fast_image_resize` | MIT OR Apache-2.0 | SIMD resampling |
 | `kamadak-exif` | BSD-2-Clause | EXIF metadata |
@@ -23,8 +26,8 @@ SeePic source.
 | `windows-sys` | MIT OR Apache-2.0 | Win32 APIs |
 | `serde`, `serde_json`, `anyhow`, `thiserror` | MIT OR Apache-2.0 | configuration and errors |
 
-The full dependency graph is recorded in `Cargo.lock`. Of the 835 locked
-packages, all are permissively licensed; a few transitive crates are
+The full dependency graph is recorded in `Cargo.lock`. All locked packages
+are permissively licensed; a few transitive crates are
 `MPL-2.0` (file-level copyleft: `cbindgen`, `dwrote`, `option-ext`) or are
 dual-licensed with a permissive option (`Unlicense OR MIT`,
 `Apache-2.0 OR GPL-2.0-only`, `MIT OR Apache-2.0 OR LGPL-2.1-or-later`), where

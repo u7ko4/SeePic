@@ -24,10 +24,10 @@ macro_rules! icon_assets {
 }
 
 const ICON_ASSETS: &[(&str, &[u8])] = icon_assets![
-    "7z", "apng", "arw", "avif", "bmp", "cbr", "cb7", "cbt", "cbz", "clip", "cr2", "cr3",
-    "dds", "dib", "dng", "exr", "ff", "farbfeld", "gif", "hdr", "heic", "heif", "ico", "jfif",
-    "jpe", "jpeg", "jpg", "nef", "nrw", "orf", "pam", "pbm", "pgm", "png", "pnm", "ppm",
-    "psb", "psd", "qoi", "rar", "svg", "tar", "tga", "tif", "tiff", "webp", "zip",
+    "7z", "apng", "arw", "avif", "bmp", "cbr", "cb7", "cbt", "cbz", "clip", "cr2", "cr3", "dds",
+    "dib", "dng", "exr", "ff", "farbfeld", "gif", "hdr", "heic", "heif", "ico", "jfif", "jpe",
+    "jpeg", "jpg", "jxl", "nef", "nrw", "orf", "pam", "pbm", "pgm", "png", "pnm", "ppm", "psb",
+    "psd", "qoi", "rar", "svg", "tar", "tga", "tif", "tiff", "webp", "zip",
 ];
 
 /// The embedded icon that stands for `extension`.

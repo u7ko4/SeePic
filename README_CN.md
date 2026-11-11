@@ -19,7 +19,7 @@ SeePic 是一个面向 Windows 的桌面图片查看器与漫画阅读器，使�
 
 ## 功能
 
-- **图片格式**：JPEG、PNG、GIF、WebP、BMP、TIFF、TGA、PNM、DDS、HDR、EXR、QOI、ICO 等。
+- **图片格式**：JPEG、PNG、GIF、WebP、AVIF、JPEG XL、BMP、TIFF、TGA、PNM、DDS、HDR、EXR、QOI、ICO 等。
 - **压缩包**：ZIP / CBZ、7Z / CB7、RAR / CBR、TAR / CBT；加密包会提示输入密码。
 - **浏览方式**：原始大小（100%）、适合窗口、适合宽度、适合高度、智能双页（左→右 / 左←右）、漫画 webtoon（纵向连续滚动）。
 - **缩略图**：底部胶片条与全屏缩略图网格；网格左侧 A–Z 快速定位，右侧滚动条自动隐藏。

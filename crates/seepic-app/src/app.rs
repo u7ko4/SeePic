@@ -7287,9 +7287,9 @@ impl ViewerApp {
             .add_filter(
                 seepic_core::i18n::tr("Images & Archives"),
                 &[
-                    "jpg", "jpeg", "jpe", "jfif", "png", "gif", "webp", "bmp", "ico", "tif",
-                    "tiff", "tga", "pnm", "dds", "hdr", "exr", "qoi", "zip", "cbz", "7z", "cb7",
-                    "rar", "cbr", "tar", "cbt",
+                    "jpg", "jpeg", "jpe", "jfif", "png", "gif", "webp", "avif", "jxl", "bmp",
+                    "ico", "tif", "tiff", "tga", "pnm", "dds", "hdr", "exr", "qoi", "zip", "cbz",
+                    "7z", "cb7", "rar", "cbr", "tar", "cbt",
                 ],
             );
         Self::dialog_off_stack(
@@ -7379,7 +7379,12 @@ impl ViewerApp {
     pub fn pick_background_image(&mut self, cx: &mut Context<Self>) {
         let dialog = rfd::FileDialog::new()
             .set_title(seepic_core::i18n::tr("Choose Background Image"))
-            .add_filter(seepic_core::i18n::tr("Image"), &["jpg", "jpeg", "png", "gif", "webp", "bmp", "tif", "tiff"]);
+            .add_filter(
+                seepic_core::i18n::tr("Image"),
+                &[
+                    "jpg", "jpeg", "png", "gif", "webp", "avif", "jxl", "bmp", "tif", "tiff",
+                ],
+            );
         Self::dialog_off_stack(
             cx,
             move || dialog.pick_file(),

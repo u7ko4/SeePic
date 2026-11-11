@@ -43,6 +43,12 @@ zune-core = "0.5"
 # decoded frame by frame on a background thread while the viewer plays what has
 # already arrived.
 image-webp = "0.2.4"
+# AVIF decoding and header probing, with a pure-Rust AV1 decoder.
+oxideav-avif = "0.0.17"
+# JPEG XL support. jxl-oxide decodes; zune-jpegxl writes the lossless modular
+# bitstream the batch converter offers.
+jxl-oxide = "0.12.6"
+zune-jpegxl = "0.5.2"
 
 # The swap store: frames live in mapped temporary files instead of the heap, so
 # the process's private working set does not grow with the images it holds.

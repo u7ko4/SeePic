@@ -19,7 +19,7 @@ SeePic is a desktop image viewer and comic reader for Windows, written in **Rust
 
 ## Features
 
-- **Image formats**: JPEG, PNG, GIF, WebP, BMP, TIFF, TGA, PNM, DDS, HDR, EXR, QOI, ICO and more.
+- **Image formats**: JPEG, PNG, GIF, WebP, AVIF, JPEG XL, BMP, TIFF, TGA, PNM, DDS, HDR, EXR, QOI, ICO and more.
 - **Archives**: ZIP / CBZ, 7Z / CB7, RAR / CBR and TAR / CBT, including encrypted archives with a password prompt.
 - **View modes**: actual size (100%), fit window, fit width, fit height, smart two-page spreads (left-to-right and right-to-left), and vertical webtoon scrolling.
 - **Thumbnails**: a filmstrip below the image and a full-screen thumbnail grid, with A–Z jumping on the left and an auto-hiding scrollbar on the right.

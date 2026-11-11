@@ -595,4 +595,5 @@ pub const TRANSLATIONS: &[(&str, &str)] = &[
     ("(size at conversion)", "（轉換時計算尺寸）"),
     ("Will overwrite files with the same name. This cannot be undone.", "將覆蓋同名檔案，此操作無法復原。"),
     ("Batch Image Convert…", "批量圖片轉換…"),
+    ("This build writes JPEG XL losslessly", "此版本以無損方式寫入 JPEG XL"),
 ];
