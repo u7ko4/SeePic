@@ -1470,10 +1470,21 @@ mod tests {
 
     #[test]
     fn the_group_list_is_in_the_order_the_panel_shows() {
-        assert_eq!(Group::ALL.len(), 9);
+        // Compare the variants, not their labels: labels follow the UI language
+        // and the CI runner's system language is English.
         assert_eq!(
-            Group::ALL.map(|group| group.label()),
-            ["基础", "界面", "文件关联", "系统菜单", "键盘快捷键", "鼠标操作", "高级", "其他", "语言"]
+            Group::ALL,
+            [
+                Group::General,
+                Group::Interface,
+                Group::FileAssoc,
+                Group::SystemMenu,
+                Group::Keyboard,
+                Group::Mouse,
+                Group::Advanced,
+                Group::Other,
+                Group::Language,
+            ]
         );
     }
 
