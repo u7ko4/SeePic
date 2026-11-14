@@ -8073,6 +8073,13 @@ impl ViewerApp {
         if event.button != MouseButton::Left {
             return;
         }
+        // The settings window covers the viewer and is a normal place to
+        // double-click (selecting a path, say). Window-level mouse bindings
+        // such as the default DoubleLeft -> Maximize must not fire there.
+        if self.show_settings {
+            self.last_click_up = None;
+            return;
+        }
         let doubled =
             self.register_click_up(f32::from(event.position.x), f32::from(event.position.y));
         if doubled && let Some(command) = self.settings.mouse_command(MouseSlot::DoubleLeft) {
