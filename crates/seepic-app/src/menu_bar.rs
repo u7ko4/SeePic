@@ -288,6 +288,9 @@ fn control_cell(
 
     div()
         .id(id)
+        // The cells are controls, not caption: a press belongs to them, and
+        // two quick presses must not read as a double click behind them.
+        .occlude()
         .flex()
         .w(px(BAR_HEIGHT))
         .h_full()
@@ -388,42 +391,51 @@ fn bar_row(view: &ViewerApp, window: &Window, cx: &mut Context<ViewerApp>) -> im
     ))
     .child(pin_button(view, cx))
     // The bar is our own chrome, so the platform has no caption area to drag
-    // by. A press arms the drag; the first movement starts it, and a press that
-    // does not move still reaches the buttons underneath. A fullscreen window
-    // covers its display already, so there is nowhere to drag it to.
-    .when(!view.fullscreen, |this| {
-        this.on_mouse_down(
-            MouseButton::Left,
-            cx.listener(|this, _: &MouseDownEvent, _window, _cx| {
-                this.chrome_drag_armed = true;
-            }),
-        )
-        .on_mouse_up(
-            MouseButton::Left,
-            cx.listener(|this, _: &MouseUpEvent, _window, _cx| {
-                this.chrome_drag_armed = false;
-            }),
-        )
-    })
-    // Fullscreen, the bar is the window's caption, and the platform has no
-    // caption behaviour there. The root never sees these releases either: the
-    // bar's occluder is what keeps it clickable, and it stops the hit test
-    // before the root, so the double click is recognised on the bar itself.
-    .when(view.fullscreen, |this| {
-        this.on_mouse_up(
-            MouseButton::Left,
-            cx.listener(|this, event: &MouseUpEvent, window, cx| {
-                let doubled = this.register_click_up(
-                    f32::from(event.position.x),
-                    f32::from(event.position.y),
-                );
-                if doubled && let Some(command) = this.settings.mouse_command(MouseSlot::DoubleLeft)
-                {
-                    this.execute(command, window, cx);
-                }
-            }),
-        )
-    })
+    // by. A press on the bar's own background arms two gestures: a title-bar
+    // click, and a window move once the pointer has really moved. The controls
+    // stop a press before it reaches this row, so pressing one never moves the
+    // window (see their own mouse-down handlers).
+    //
+    // The move is started here rather than left to the root because the root
+    // only sees pointer moves over the canvas: a drag that stays inside the
+    // 34px bar would never reach it, which made a horizontal drag a dead zone.
+    .on_mouse_down(
+        MouseButton::Left,
+        cx.listener(|this, event: &MouseDownEvent, _window, _cx| {
+            this.begin_chrome_press(
+                f32::from(event.position.x),
+                f32::from(event.position.y),
+            );
+        }),
+    )
+    .on_mouse_move(cx.listener(|this, event: &MouseMoveEvent, window, cx| {
+        if event.pressed_button == Some(MouseButton::Left) {
+            this.drag_chrome_if_moved(
+                f32::from(event.position.x),
+                f32::from(event.position.y),
+                window,
+                cx,
+            );
+        }
+    }))
+    // A release that did not turn into a drag is a click on the caption. The
+    // root never sees it: the bar's occluder stops the hit test before the
+    // root, so the double click is recognised on the bar itself, in a window as
+    // well as in fullscreen.
+    .on_mouse_up(
+        MouseButton::Left,
+        cx.listener(|this, event: &MouseUpEvent, window, cx| {
+            let on_caption = this.end_chrome_press();
+            let doubled = this.register_bar_click_up(
+                f32::from(event.position.x),
+                f32::from(event.position.y),
+                on_caption,
+            );
+            if doubled && let Some(command) = this.settings.mouse_command(MouseSlot::DoubleLeft) {
+                this.execute(command, window, cx);
+            }
+        }),
+    )
     // Record where each menu title landed: the dropdown hangs below the button
     // that was clicked. The anchors are in the same layout pixels the overlay
     // positions itself in.
@@ -503,7 +515,9 @@ fn menu_toggle(view: &ViewerApp, cx: &mut Context<ViewerApp>) -> impl IntoElemen
         // toggle, not a click on the window behind it.
         .on_mouse_down(
             MouseButton::Left,
-            cx.listener(|_this, _: &MouseDownEvent, _window, cx| {
+            cx.listener(|this, _: &MouseDownEvent, _window, cx| {
+                // The press is the button's, not the caption's.
+                this.cancel_chrome_press();
                 cx.stop_propagation();
             }),
         )
@@ -668,6 +682,15 @@ fn icon_button(
                 this.execute(command, window, cx);
             }))
         })
+        // The press belongs to the button, not to the bar behind it: it must
+        // not arm a window move or count towards a title-bar double click.
+        .on_mouse_down(
+            MouseButton::Left,
+            cx.listener(|this, _: &MouseDownEvent, _window, cx| {
+                this.cancel_chrome_press();
+                cx.stop_propagation();
+            }),
+        )
 }
 
 /// The pin: whether the bars keep their own space or float over the image.
@@ -695,6 +718,14 @@ fn pin_button(view: &ViewerApp, cx: &mut Context<ViewerApp>) -> impl IntoElement
         .on_click(cx.listener(|this, _: &ClickEvent, window, cx| {
             this.execute(Command::ToggleChromeRows, window, cx);
         }))
+        // See `icon_button`: a press here is not a press on the caption.
+        .on_mouse_down(
+            MouseButton::Left,
+            cx.listener(|this, _: &MouseDownEvent, _window, cx| {
+                this.cancel_chrome_press();
+                cx.stop_propagation();
+            }),
+        )
 }
 
 /// A menu title, with its dropdown hanging below it when open.
@@ -722,7 +753,8 @@ fn menu_button(
                 .child(label)
                 .on_mouse_down(
                     MouseButton::Left,
-                    cx.listener(|_this, _: &MouseDownEvent, _window, cx| {
+                    cx.listener(|this, _: &MouseDownEvent, _window, cx| {
+                        this.cancel_chrome_press();
                         cx.stop_propagation();
                     }),
                 )

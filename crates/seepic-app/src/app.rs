@@ -59,6 +59,13 @@ pub const STATUS_BAR_HEIGHT: f32 = 30.;
 /// How far two releases may drift apart and still count as one double click.
 /// How long they may be apart is the system's own double-click time.
 const DOUBLE_CLICK_SLOP: f32 = 5.;
+/// How far the pointer must travel from a press on our bar before the window
+/// starts following it.
+///
+/// A click wobbles a pixel or two. Starting the platform's modal move loop on
+/// that wobble would swallow the release, and with it the double click that
+/// title-bar clicks are for.
+const CAPTION_DRAG_THRESHOLD: f32 = 4.;
 /// How near the top edge the pointer has to be to reveal the bars.
 const TOP_REVEAL: f32 = 48.;
 /// Above this many decoded bytes, an animation is played a frame at a time.
@@ -347,6 +354,21 @@ impl Toast {
     }
 }
 
+/// What a recorded release landed on.
+///
+/// A double click is only assembled from two releases on the same surface, so
+/// two quick clicks on a menu or toolbar button cannot read as a click on the
+/// title bar's caption.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ClickSurface {
+    /// The canvas, a panel or the status bar: the root's own handling.
+    Window,
+    /// The title bar's background or title.
+    Caption,
+    /// A control on the title bar.
+    Control,
+}
+
 pub struct ViewerApp {
     focus: FocusHandle,
 
@@ -427,8 +449,14 @@ pub struct ViewerApp {
     /// The menu row the keyboard is on, as an index into the open menu's rows.
     menu_index: Option<usize>,
     /// True between a left press on the chrome and the first movement, so a
-    /// drag that starts on a button still moves the window.
-    pub chrome_drag_armed: bool,
+    /// drag that starts on the bar still moves the window.
+    chrome_drag_armed: bool,
+    /// Where that press landed.
+    ///
+    /// The drag only starts once the pointer has moved a few pixels from here,
+    /// so the release of a plain click still reaches the bar and can be the
+    /// first half of a double click.
+    chrome_press_at: Option<IvPoint>,
     /// The command waiting for a new key chord, while the recorder is armed.
     pub recording_key: Option<Command>,
     /// The open panel, and any screens pushed on top of it.
@@ -722,8 +750,9 @@ pub struct ViewerApp {
 
     /// Last known cursor position, for drag-to-pan.
     last_mouse: Option<IvPoint>,
-    /// Where and when the left button was last released, for the double click.
-    last_click_up: Option<(Instant, IvPoint)>,
+    /// Where and when the left button was last released, and which surface it
+    /// was on, for the double click.
+    last_click_up: Option<(Instant, IvPoint, ClickSurface)>,
     /// Latest pointer position, used to reveal the edge controls.
     cursor: Option<IvPoint>,
 }
@@ -802,6 +831,7 @@ impl ViewerApp {
             menu_submenu: None,
             panel_stack: Vec::new(),
             chrome_drag_armed: false,
+            chrome_press_at: None,
             recording_key: None,
             adjustments: Adjustments::default(),
             info: None,
@@ -8039,8 +8069,8 @@ impl ViewerApp {
         }
     }
 
-    /// Whether this release is the second half of a double click, recording the
-    /// release as it goes.
+    /// Whether this release is the second half of a double click on a given
+    /// surface, recording the release as it goes.
     ///
     /// The platform never reports a double click inside the window: Windows
     /// turns the second press into `WM_LBUTTONDBLCLK`, which GPUI does not
@@ -8048,19 +8078,61 @@ impl ViewerApp {
     /// click count it does report therefore never gets past one. Two releases
     /// close together in time and place are the double click, timed against the
     /// user's own double-click setting.
-    pub fn register_click_up(&mut self, x: f32, y: f32) -> bool {
+    fn register_click_on(&mut self, x: f32, y: f32, surface: ClickSurface) -> bool {
         let point = IvPoint::new(x, y);
-        let doubled = self.last_click_up.is_some_and(|(at, last)| {
-            at.elapsed() < crate::chrome_drag::double_click_interval()
-                && (point.x - last.x).abs() <= DOUBLE_CLICK_SLOP
-                && (point.y - last.y).abs() <= DOUBLE_CLICK_SLOP
-        });
+        let doubled = self.double_click_at(point, surface);
         self.last_click_up = if doubled {
             None
         } else {
-            Some((Instant::now(), point))
+            Some((Instant::now(), point, surface))
         };
         doubled
+    }
+
+    /// Whether a release at `point` pairs with the last one, which has to have
+    /// landed on the same surface.
+    fn double_click_at(&self, point: IvPoint, surface: ClickSurface) -> bool {
+        self.last_click_up.is_some_and(|(at, last, last_surface)| {
+            last_surface == surface
+                && at.elapsed() < crate::chrome_drag::double_click_interval()
+                && (point.x - last.x).abs() <= DOUBLE_CLICK_SLOP
+                && (point.y - last.y).abs() <= DOUBLE_CLICK_SLOP
+        })
+    }
+
+    /// Record a release anywhere the root handles the mouse, and say whether it
+    /// completes a double click.
+    pub fn register_click_up(&mut self, x: f32, y: f32) -> bool {
+        self.register_click_on(x, y, ClickSurface::Window)
+    }
+
+    /// Record a release on the title bar, and say whether it completes a double
+    /// click on the bar's caption.
+    ///
+    /// `on_caption` says whether the release followed a press on the bar's own
+    /// background rather than on one of its controls. The second press of a
+    /// double click is not dispatched at all, so that release has no press of
+    /// its own; it still belongs to the caption when it lands where the
+    /// previous caption click did.
+    pub fn register_bar_click_up(&mut self, x: f32, y: f32, on_caption: bool) -> bool {
+        // The settings dialog covers the viewer and is a normal place to
+        // double-click (selecting a path, say). The window-level binding must
+        // not fire while it is open, even when the click lands on the bar's
+        // dimmed backdrop.
+        if self.show_settings {
+            self.last_click_up = None;
+            return false;
+        }
+        let point = IvPoint::new(x, y);
+        let surface = if on_caption || self.double_click_at(point, ClickSurface::Caption) {
+            ClickSurface::Caption
+        } else {
+            ClickSurface::Control
+        };
+        let doubled = self.register_click_on(x, y, surface);
+        // A control's click never becomes a title-bar double click, even when
+        // it happens twice.
+        doubled && surface == ClickSurface::Caption
     }
 
     /// Double-click detection for the `DoubleLeft` slot.
@@ -8087,6 +8159,95 @@ impl ViewerApp {
         }
     }
 
+    /// A left press on our chrome row.
+    ///
+    /// The press arms both gestures the row offers: a double click on its
+    /// caption, and a window move once the pointer has really moved. The point
+    /// is kept so the move waits out the few pixels a click wobbles by — the
+    /// platform's move loop would otherwise eat the release before it could be
+    /// read as a click.
+    pub fn begin_chrome_press(&mut self, x: f32, y: f32) {
+        self.chrome_drag_armed = true;
+        self.chrome_press_at = Some(IvPoint::new(x, y));
+    }
+
+    /// Forget a pending chrome press, accepted or not.
+    pub fn cancel_chrome_press(&mut self) {
+        self.chrome_drag_armed = false;
+        self.chrome_press_at = None;
+    }
+
+    /// End a chrome press and say whether it was one: a press on the bar's own
+    /// background, rather than on one of its controls.
+    pub fn end_chrome_press(&mut self) -> bool {
+        let pressed = self.chrome_drag_armed;
+        self.cancel_chrome_press();
+        pressed
+    }
+
+    /// The first real movement after a chrome press starts the window drag.
+    ///
+    /// Returns whether the drag was started, so a caller that has nothing else
+    /// to do with the move can stop there.
+    pub fn drag_chrome_if_moved(
+        &mut self,
+        x: f32,
+        y: f32,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        // A fullscreen window covers its display already, so there is nowhere
+        // to drag it to.
+        if self.fullscreen || !self.chrome_drag_armed {
+            return false;
+        }
+        let Some(start) = self.chrome_press_at else {
+            return false;
+        };
+        if (x - start.x).abs() < CAPTION_DRAG_THRESHOLD
+            && (y - start.y).abs() < CAPTION_DRAG_THRESHOLD
+        {
+            return false;
+        }
+        self.start_chrome_drag(window, cx);
+        true
+    }
+
+    /// Hand the window its own move loop for a drag that began on the chrome.
+    fn start_chrome_drag(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.cancel_chrome_press();
+        let Some(hwnd) = crate::chrome_drag::native_handle(window) else {
+            return;
+        };
+        // The move loop is modal and dispatches this thread's messages, our
+        // main-thread tasks among them. Entered from inside an update — as this
+        // handler is — those tasks call `Entity::update` while the update on the
+        // stack still holds the app, and panic with "RefCell already borrowed".
+        // So the loop is entered from a task instead, once this update has
+        // returned.
+        cx.spawn_in(window, async move |this, cx| {
+            // One turn of the message loop: the update that got us here is
+            // done and has released the app.
+            cx.background_executor()
+                .timer(std::time::Duration::from_millis(1))
+                .await;
+            crate::chrome_drag::start_handle(hwnd);
+            // The loop runs until the button comes up. Dragging a maximized
+            // window restores it, and that resize arrives while the loop is
+            // still running: the window counts as drawing, so the resize it
+            // reports is dropped, and the chrome keeps the maximized layout
+            // afterwards, with the right-hand buttons outside the window and
+            // the status bar below it. Reading the bounds back once the loop
+            // is over is what puts the layout right.
+            this.update_in(cx, |_, window, cx| {
+                window.bounds_changed(cx);
+                cx.notify();
+            })
+            .ok();
+        })
+        .detach();
+    }
+
     /// Track the pointer anywhere in the window, not just over the canvas.
     pub fn on_window_mouse_move(
         &mut self,
@@ -8095,40 +8256,16 @@ impl ViewerApp {
         cx: &mut Context<Self>,
     ) {
         // A press on the chrome row arms a window drag; the first movement
-        // starts it. This lives on the root because the pointer leaves the
-        // chrome row as soon as the drag begins.
-        if self.chrome_drag_armed && event.pressed_button == Some(MouseButton::Left) {
-            self.chrome_drag_armed = false;
-            let Some(hwnd) = crate::chrome_drag::native_handle(window) else {
-                return;
-            };
-            // The move loop is modal and dispatches this thread's messages, our
-            // main-thread tasks among them. Entered from inside an update — as
-            // this handler is — those tasks call `Entity::update` while the
-            // update on the stack still holds the app, and panic with "RefCell
-            // already borrowed". So the loop is entered from a task instead,
-            // once this update has returned.
-            cx.spawn_in(window, async move |this, cx| {
-                // One turn of the message loop: the update that got us here is
-                // done and has released the app.
-                cx.background_executor()
-                    .timer(std::time::Duration::from_millis(1))
-                    .await;
-                crate::chrome_drag::start_handle(hwnd);
-                // The loop runs until the button comes up. Dragging a maximized
-                // window restores it, and that resize arrives while the loop is
-                // still running: the window counts as drawing, so the resize it
-                // reports is dropped, and the chrome keeps the maximized layout
-                // afterwards, with the right-hand buttons outside the window and
-                // the status bar below it. Reading the bounds back once the loop
-                // is over is what puts the layout right.
-                this.update_in(cx, |_, window, cx| {
-                    window.bounds_changed(cx);
-                    cx.notify();
-                })
-                .ok();
-            })
-            .detach();
+        // starts it. The bar handles this itself for moves that stay inside it;
+        // this is what catches a drag that has already left the row.
+        if event.pressed_button == Some(MouseButton::Left)
+            && self.drag_chrome_if_moved(
+                f32::from(event.position.x),
+                f32::from(event.position.y),
+                window,
+                cx,
+            )
+        {
             return;
         }
         // Dragging the progress track keeps seeking while the button is held,
@@ -8194,7 +8331,10 @@ impl ViewerApp {
             && layout.drawn.w <= viewport.w + 0.5
             && layout.drawn.h <= viewport.h + 0.5
         {
-            self.chrome_drag_armed = true;
+            self.begin_chrome_press(
+                f32::from(event.position.x),
+                f32::from(event.position.y),
+            );
         }
         cx.notify();
     }
@@ -8616,7 +8756,7 @@ impl Render for ViewerApp {
             .on_mouse_up(
                 MouseButton::Left,
                 cx.listener(|this, event: &MouseUpEvent, _window, _cx| {
-                    this.chrome_drag_armed = false;
+                    this.cancel_chrome_press();
                     this.scrubbing = false;
                     let _ = event;
                 }),

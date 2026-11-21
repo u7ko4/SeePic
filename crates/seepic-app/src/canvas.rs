@@ -538,7 +538,7 @@ fn side_arrow(
         .on_mouse_up(
             MouseButton::Left,
             cx.listener(|this, _: &MouseUpEvent, _window, cx| {
-                this.chrome_drag_armed = false;
+                this.cancel_chrome_press();
                 cx.stop_propagation();
             }),
         )
