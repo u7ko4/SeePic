@@ -2783,6 +2783,18 @@ impl ViewerApp {
         }
     }
 
+    /// Whether the floating position badge is drawn.
+    ///
+    /// Only while the chrome is unpinned: pinned, the title bar is always there
+    /// and its title already starts with the position. Unpinned, the bar is
+    /// only revealed at the top edge, and the badge takes the counter's place
+    /// while it is away.
+    pub fn position_badge_visible(&self) -> bool {
+        self.has_images()
+            && !self.settings.chrome_mode.takes_rows()
+            && !self.top_bar_visible()
+    }
+
     /// Change 界面模式, keeping the pointer's reveal state sensible.
     pub fn set_chrome_mode(&mut self, mode: ChromeMode, cx: &mut Context<Self>) {
         self.settings.chrome_mode = mode;
@@ -8817,6 +8829,12 @@ impl Render for ViewerApp {
                             this.child(thumbnails::render(self, entity.clone(), cx))
                         }),
                 )
+                // Unpinned, the title bar only shows its counter while the
+                // pointer is at the top; the badge keeps it in the corner the
+                // title starts at the rest of the time.
+                .when(self.position_badge_visible(), |this| {
+                    this.child(menu_bar::position_badge(self, cx))
+                })
                 // The floating modes draw the bars over the image: the automatic
                 // one when the pointer nears the edge they belong to, and the
                 // immersive one never.

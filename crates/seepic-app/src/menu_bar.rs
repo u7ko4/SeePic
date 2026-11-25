@@ -773,6 +773,27 @@ fn menu_button(
         )
 }
 
+/// The image counter, floating in the corner while the title bar is unpinned.
+///
+/// Unpinned, the bar is only on screen while the pointer is at the top, so the
+/// position its title starts with would be gone the rest of the time. The badge
+/// keeps it where that title would be and gives way while the bar is up.
+pub fn position_badge(view: &ViewerApp, cx: &mut Context<ViewerApp>) -> impl IntoElement {
+    let theme = cx.theme().clone();
+    let (position, total) = view.position();
+
+    div()
+        .absolute()
+        .top(px(8.))
+        .left(px(12.))
+        .px_2()
+        .py_0p5()
+        .text_xs()
+        .text_color(theme.muted_foreground)
+        .whitespace_nowrap()
+        .child(format!("{position}/{total}"))
+}
+
 /// The way out when the chrome is hidden.
 ///
 /// A mode that hides both bars takes the toggles with it, so this floats the
